@@ -20,6 +20,7 @@ struct TasksScreen: View {
     @EnvironmentObject private var downloads: DownloadManager
     @EnvironmentObject private var uploads: UploadManager
     @EnvironmentObject private var nav: NavModel
+    @Environment(\.olAccent) private var accent
 
     @State private var segment: Segment = .download
     @State private var previewItem: QLItem?
@@ -45,6 +46,7 @@ struct TasksScreen: View {
                 .background(.regularMaterial)
             }
             .navigationTitle("任务")
+            .olGlassNavBar()
             .navigationDestination(for: Route.self) { route in
                 RouteDestination(route: route)
             }
@@ -149,7 +151,9 @@ struct TasksScreen: View {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
-                downloads.remove(item.id)
+                // 用户在列表里删掉一条，期望的是「这个下载连同文件一起没了」，
+                // 所以这里调 removeWithFile 而不是仅移除记录。
+                downloads.removeWithFile(item.id)
             } label: {
                 Label("删除", systemImage: "trash")
             }

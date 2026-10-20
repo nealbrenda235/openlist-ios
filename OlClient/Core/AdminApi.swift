@@ -462,6 +462,123 @@ final class AdminApi {
         _ = try await get(baseUrl, "/api/share/delete?id=\(encoded)", token)
     }
 
+    func share(baseUrl: String, token: String, id: String) async throws -> ShareItem? {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: CharacterSet.olPathSegment) ?? id
+        let json = try await get(baseUrl, "/api/share/get?id=\(encoded)", token)
+        return Self.parseShare(json.olObject("data"))
+    }
+
+    /// 分享提交体。`expires` 必须显式传 null 表示永久，传空字符串服务端会当成非法时间。
+    private func shareBody(files: [String],
+                           pwd: String,
+                           remark: String,
+                           expires: String?,
+                           maxAccessed: Int,
+                           readme: String,
+                           header: String) -> [String: Any] {
+        var body: [String: Any] = [
+            "files": files,
+            "pwd": pwd,
+            "remark": remark,
+            "max_accessed": maxAccessed,
+            "readme": readme,
+            "header": header,
+            "order_by": "name",
+            "order_direction": "asc",
+            "extract_folder": "front",
+        ]
+        if let expires, !expires.isEmpty {
+            body["expires"] = expires
+        } else {
+            body["expires"] = NSNull()
+        }
+        return body
+    }
+
+    @discardableResult
+    func createShare(baseUrl: String,
+                     token: String,
+                     files: [String],
+                     pwd: String,
+                     remark: String,
+                     expires: String?,
+                     maxAccessed: Int,
+                     readme: String,
+                     header: String) async throws -> ShareItem {
+        let body = shareBody(files: files, pwd: pwd, remark: remark,
+                             expires: expires, maxAccessed: maxAccessed,
+                             readme: readme, header: header)
+        let json = try await post(baseUrl, "/api/share/create", token, body)
+        return Self.parseShare(json.olObject("data")) ?? ShareItem(id: "", files: files, remark: remark,
+                                                                  creator: "", created: "", expires: "",
+                                                                  pwd: pwd, disabled: false, accessed: 0, maxAccessed: maxAccessed)
+    }
+
+    /// 编辑分享。⚠️ 全量覆盖：必须把 accessed / disabled / readme / header 原样带上，
+    /// 否则服务端会把它们写成零值（用户看到的“分享突然失效/次数归零”就是这么来的）。
+    func updateShare(baseUrl: String,
+                     token: String,
+                     id: String,
+                     files: [String],
+                     pwd: String,
+                     remark: String,
+                     expires: String?,
+                     maxAccessed: Int,
+                     readme: String,
+                     header: String,
+                     accessed: Int,
+                     disabled: Bool) async throws {
+        var body = shareBody(files: files, pwd: pwd, remark: remark,
+                             expires: expires, maxAccessed: maxAccessed,
+                             readme: readme, header: header)
+        body["id"] = id
+        body["accessed"] = accessed
+        body["disabled"] = disabled
+        _ = try await post(baseUrl, "/api/share/update", token, body)
+    }
+
+    static func parseShare(_ o: [String: Any]?) -> ShareItem? {
+        guard let o else { return nil }
+        return ShareItem(
+            id: o.olString("id"),
+            files: o.olArray("files")?.compactMap { $0 as? String } ?? [],
+            remark: o.olString("remark"),
+            creator: o.olString("creator"),
+            created: o.olString("created"),
+            expires: o.olString("expires"),
+            pwd: o.olString("pwd"),
+            disabled: o.olBool("disabled"),
+            accessed: o.olInt("accessed"),
+            maxAccessed: o.olInt("max_accessed")
+        )
+    }
+
+    // ---------- 新建存储（向导） ----------
+
+    /// 用驱动表单单字段拼一个空存储，供创建向导使用。
+    func emptyStorage(driver: String, mountPath: String = "/new") -> AdminStorage {
+        AdminStorage(id: 0, mountPath: mountPath, driver: driver, status: "", remark: "",
+                     order: 0, cacheExpiration: 30, disabled: false, disableIndex: false,
+                     enableSign: false, webProxy: false, webdavPolicy: "302_redirect",
+                     proxyRange: false, downProxyUrl: "", orderBy: "", orderDirection: "",
+                     extractFolder: "", addition: "{}")
+    }
+
+    // ---------- 元信息 ----------
+
+    func updateMeta(baseUrl: String, token: String,
+                    id: Int, path: String, password: String,
+                    pSub: Bool, write: Bool, hide: String) async throws {
+        _ = try await post(baseUrl, "/api/admin/meta/update", token, [
+            "id": id, "path": path, "password": password,
+            "p_sub": pSub, "write": write, "hide": hide,
+        ])
+    }
+
+    // ---------- 消息 ----------
+
+    // messageGet / messageSend 已存在
+
     // ---------- 底层 ----------
 
     private func get(_ baseUrl: String, _ path: String, _ token: String) async throws -> [String: Any] {

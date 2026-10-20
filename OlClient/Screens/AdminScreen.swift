@@ -13,6 +13,7 @@
 import SwiftUI
 
 struct AdminScreen: View {
+    @Environment(\.olAccent) private var accent
 
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var servers: ServerStore
@@ -68,10 +69,21 @@ struct AdminScreen: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    Task { await reload() }
+                Menu {
+                    NavigationLink {
+                        AdminStorageCreateScreen(serverId: serverId) {
+                            Task { await reload() }
+                        }
+                    } label: {
+                        Label("新建挂载", systemImage: "plus.circle")
+                    }
+                    Button {
+                        Task { await reload() }
+                    } label: {
+                        Label("刷新", systemImage: "arrow.clockwise")
+                    }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    Image(systemName: "ellipsis.circle")
                 }
             }
         }
@@ -163,10 +175,10 @@ struct AdminScreen: View {
         HStack(spacing: 11) {
             ZStack {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(storage.disabled ? Color.gray.opacity(0.16) : Color.accentColor.opacity(0.15))
+                    .fill(storage.disabled ? Color.gray.opacity(0.16) : accent.opacity(0.15))
                 Image(systemName: storage.disabled ? "externaldrive.badge.xmark" : "externaldrive.fill")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(storage.disabled ? Color.secondary : Color.accentColor)
+                    .foregroundStyle(storage.disabled ? Color.secondary : accent)
             }
             .frame(width: 30, height: 30)
 
@@ -217,6 +229,26 @@ struct AdminScreen: View {
                 AdminSharesScreen(serverId: serverId)
             } label: {
                 Label("分享管理", systemImage: "square.and.arrow.up.on.square")
+            }
+            NavigationLink {
+                AdminMetaScreen(serverId: serverId)
+            } label: {
+                Label("元信息与权限", systemImage: "lock.doc")
+            }
+            NavigationLink {
+                AdminMessageScreen(serverId: serverId)
+            } label: {
+                Label("服务端公告", systemImage: "megaphone")
+            }
+            NavigationLink {
+                AdminMetaScreen(serverId: serverId)
+            } label: {
+                Label("元信息与权限", systemImage: "lock.doc")
+            }
+            NavigationLink {
+                AdminMessageScreen(serverId: serverId)
+            } label: {
+                Label("服务端公告", systemImage: "megaphone")
             }
         } header: {
             Text("管理")

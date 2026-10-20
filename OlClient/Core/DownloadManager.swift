@@ -156,6 +156,8 @@ final class DownloadManager: NSObject, ObservableObject {
         pump()
     }
 
+    /// 只从列表移除**记录**，不碰已下载的文件。
+    /// （之前分不清这两个语义，导致用户左滑删除后本地文件还在。）
     func remove(_ id: String) {
         if let task = tasks[id] {
             taskMap.removeValue(forKey: task.taskIdentifier)
@@ -168,9 +170,27 @@ final class DownloadManager: NSObject, ObservableObject {
         persist()
     }
 
+    /// 删除记录 **并删除本地文件**。左滑删除走这个。
+    func removeWithFile(_ id: String) {
+        let file = item(id)?.localFile ?? ""
+        remove(id)
+        guard !file.isEmpty else { return }
+        let url = Self.documentsDir.appendingPathComponent(file)
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// 只删本地文件，保留记录（用户想重新下载时还能看到条目）。
+    func deleteFile(_ id: String) {
+        guard let file = item(id)?.localFile, !file.isEmpty else { return }
+        let url = Self.documentsDir.appendingPathComponent(file)
+        try? FileManager.default.removeItem(at: url)
+        update(id) { $0.localFile = "" }
+        persist()
+    }
+
     func removeFinished() {
         for item in items where item.state == .done || item.state == .canceled {
-            remove(item.id)
+            removeWithFile(item.id)
         }
     }
 

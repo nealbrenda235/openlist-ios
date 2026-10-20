@@ -28,6 +28,7 @@ struct SettingsScreen: View {
                 aboutSection
             }
             .navigationTitle("设置")
+            .olGlassNavBarLarge()
             .navigationDestination(for: Route.self) { route in
                 RouteDestination(route: route)
             }

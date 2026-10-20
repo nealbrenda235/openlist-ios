@@ -12,6 +12,8 @@ import SwiftUI
 
 struct FileIcon: View {
 
+    @Environment(\.olAccent) private var accent
+
     let file: RemoteFile
     var size: CGFloat = 28
 
@@ -47,7 +49,7 @@ struct FileIcon: View {
     }
 
     private var tint: Color {
-        if file.isDir { return .accentColor }
+        if file.isDir { return accent }
         switch file.ext {
         case "mp4", "mkv", "webm", "mov", "avi", "ts", "m4v", "flv": return .red
         case "mp3", "flac", "wav", "aac", "m4a", "ogg", "opus": return .pink

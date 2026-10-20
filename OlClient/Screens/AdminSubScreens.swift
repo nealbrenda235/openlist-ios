@@ -11,6 +11,7 @@ import SwiftUI
 // MARK: - 用户管理
 
 struct AdminUsersScreen: View {
+    @Environment(\.olAccent) private var accent
 
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var servers: ServerStore
@@ -56,7 +57,7 @@ struct AdminUsersScreen: View {
                                     .font(.caption2)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(Color.accentColor.opacity(0.13), in: Capsule())
+                                    .background(accent.opacity(0.13), in: Capsule())
                                     .foregroundStyle(.tint)
                             }
                             Text(user.basePath)
@@ -395,6 +396,7 @@ struct AdminSettingsScreen: View {
 // MARK: - 服务端任务
 
 struct AdminTasksScreen: View {
+    @Environment(\.olAccent) private var accent
 
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var servers: ServerStore
@@ -491,7 +493,7 @@ struct AdminTasksScreen: View {
                 Spacer(minLength: 6)
                 Text(task.stateLabel)
                     .font(.caption2)
-                    .foregroundStyle(task.isActive ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(task.isActive ? accent : Color.secondary)
             }
 
             if task.isActive {
@@ -602,6 +604,8 @@ struct AdminSharesScreen: View {
     @State private var loading = true
     @State private var errorText: String?
     @State private var deleteTarget: ShareItem?
+    @State private var editing: ShareItem?
+    @State private var showCreate = false
 
     private var server: ServerConfig? { servers.get(serverId) }
 
@@ -624,6 +628,9 @@ struct AdminSharesScreen: View {
             } else {
                 Section("分享 · \(shares.count)") {
                     ForEach(shares) { share in
+                        Button {
+                            editing = share
+                        } label: {
                         VStack(alignment: .leading, spacing: 3) {
                             HStack {
                                 Text(share.files.first.map { ($0 as NSString).lastPathComponent } ?? share.id)
@@ -652,7 +659,10 @@ struct AdminSharesScreen: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         }
+                        .contentShape(Rectangle())
                         .padding(.vertical, 1)
+                        }
+                        .buttonStyle(.plain)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
                                 deleteTarget = share
@@ -676,6 +686,25 @@ struct AdminSharesScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await load() }
         .task { await load() }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showCreate = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showCreate) {
+            AdminShareCreateScreen(serverId: serverId) {
+                Task { await load() }
+            }
+        }
+        .sheet(item: $editing) { share in
+            AdminShareCreateScreen(serverId: serverId, editing: share) {
+                Task { await load() }
+            }
+        }
         .alert("删除分享？", isPresented: Binding(
             get: { deleteTarget != nil },
             set: { if !$0 { deleteTarget = nil } }

@@ -94,6 +94,7 @@ struct SearchScreen: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("搜索")
+            .olGlassNavBar()
             .searchable(text: $keyword, prompt: "文件名关键词")
             .onSubmit(of: .search) { Task { await runSearch() } }
             .toolbar {

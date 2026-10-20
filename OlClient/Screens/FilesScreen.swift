@@ -17,6 +17,7 @@ struct FilesScreen: View {
     @EnvironmentObject private var downloads: DownloadManager
     @EnvironmentObject private var uploads: UploadManager
     @EnvironmentObject private var nav: NavModel
+    @Environment(\.olAccent) private var accent
 
     @State private var editingServer: ServerConfig?
     @State private var showAddServer = false
@@ -48,7 +49,7 @@ struct FilesScreen: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("OpenList")
-            .navigationBarTitleDisplayMode(.large)
+            .olGlassNavBarLarge()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -391,7 +392,7 @@ struct ServerRow: View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.14))
+                    .fill(accent.opacity(0.14))
                 Image(systemName: "externaldrive.connected.to.line.below")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.tint)
@@ -418,7 +419,7 @@ struct ServerRow: View {
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.accentColor.opacity(0.14), in: Capsule())
+                    .background(accent.opacity(0.14), in: Capsule())
                     .foregroundStyle(.tint)
             }
         }

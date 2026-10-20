@@ -25,6 +25,7 @@ struct AdaptiveShell: View {
 }
 
 private struct PadShell: View {
+    @Environment(\.olAccent) private var accent
 
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var servers: ServerStore
@@ -47,11 +48,11 @@ private struct PadShell: View {
                             nav(for: item).popToRoot()
                         } label: {
                             Label(item.label, systemImage: tab == item ? selectedSymbol(item) : item.symbol)
-                                .foregroundStyle(tab == item ? Color.accentColor : Color.primary)
+                                .foregroundStyle(tab == item ? accent : Color.primary)
                         }
                         .listRowBackground(
                             tab == item
-                                ? Color.accentColor.opacity(0.12)
+                                ? accent.opacity(0.12)
                                 : Color.clear
                         )
                     }

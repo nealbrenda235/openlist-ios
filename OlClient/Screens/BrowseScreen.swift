@@ -18,6 +18,7 @@ struct BrowseScreen: View {
     @EnvironmentObject private var downloads: DownloadManager
     @EnvironmentObject private var uploads: UploadManager
     @EnvironmentObject private var nav: NavModel
+    @Environment(\.olAccent) private var accent
 
     let serverId: String
     let initialPath: String

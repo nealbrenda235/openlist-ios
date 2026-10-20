@@ -2,8 +2,8 @@
 //  MainShell.swift
 //  OpenList iOS
 //
-//  主界面：4 个 Tab（文件 / 搜索 / 任务 / 设置）。
-//  每个 Tab 各自持有一个 NavModel（独立页面栈），切换 Tab 不会互相顶掉。
+//  主界面：4 个 Tab + 悬浮毛玻璃 Dock。
+//  用自绘 Dock 替代系统 TabView（系统 TabView 是不透明底栏，没有浮起效果）。
 //
 
 import SwiftUI
@@ -19,26 +19,23 @@ struct MainShell: View {
     @StateObject private var settingsNav = NavModel()
 
     var body: some View {
-        TabView(selection: $tab) {
-            FilesScreen()
-                .environmentObject(filesNav)
-                .tabItem { Label(Tab.files.label, systemImage: Tab.files.symbol) }
-                .tag(Tab.files)
-
-            SearchScreen()
-                .environmentObject(searchNav)
-                .tabItem { Label(Tab.search.label, systemImage: Tab.search.symbol) }
-                .tag(Tab.search)
-
-            TasksScreen()
-                .environmentObject(tasksNav)
-                .tabItem { Label(Tab.tasks.label, systemImage: Tab.tasks.symbol) }
-                .tag(Tab.tasks)
-
-            SettingsScreen()
-                .environmentObject(settingsNav)
-                .tabItem { Label(Tab.settings.label, systemImage: Tab.settings.symbol) }
-                .tag(Tab.settings)
+        DockShell(selection: $tab) {
+            ZStack {
+                switch tab {
+                case .files:
+                    FilesScreen()
+                        .environmentObject(filesNav)
+                case .search:
+                    SearchScreen()
+                        .environmentObject(searchNav)
+                case .tasks:
+                    TasksScreen()
+                        .environmentObject(tasksNav)
+                case .settings:
+                    SettingsScreen()
+                        .environmentObject(settingsNav)
+                }
+            }
         }
         .onReceive(container.downloads.$flash) { value in
             guard !value.isEmpty else { return }
@@ -91,7 +88,7 @@ struct ToastHost: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                     .background(Color.black.opacity(0.82), in: Capsule())
-                    .padding(.bottom, 12)
+                    .padding(.bottom, 84)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .allowsHitTesting(false)
             }
