@@ -2,15 +2,11 @@
 //  BrowseScreen.swift
 //  OpenList iOS
 //
-//  目录浏览（iOS 26 风格重构）。
-//
-//  ## 这一版修掉的「不生效」
-//
-//  1. 列表/网格切换以前只改一个 @State，进出目录就重置 —— 现在按目录记忆（FilePrefs）
-//  2. 排序以前改完不刷新视图 —— 现在 sort 是 @State + 计算属性参与渲染
-//  3. 「自动刷新」设置以前从没被读过 —— 现在进入目录时按 settings.autoRefresh 决定要不要 refresh
-//  4. 「列表密度」以前只存不用 —— 现在行高与图标尺寸真的随它变
-//  5. 网格视图点击目录之前什么都不做（只有列表能下钻）—— 现在统一走 nav.push
+//  目录浏览（iOS 26 风格重构）�?//
+//  ## 这一版修掉的「不生效�?//
+//  1. 列表/网格切换以前只改一�?@State，进出目录就重置 —�?现在按目录记忆（FilePrefs�?//  2. 排序以前改完不刷新视�?—�?现在 sort �?@State + 计算属性参与渲�?//  3. 「自动刷新」设置以前从没被读过 —�?现在进入目录时按 settings.autoRefresh 决定要不�?refresh
+//  4. 「列表密度」以前只存不�?—�?现在行高与图标尺寸真的随它变
+//  5. 网格视图点击目录之前什么都不做（只有列表能下钻）—�?现在统一�?nav.push
 //
 
 import SwiftUI
@@ -85,22 +81,22 @@ struct BrowseScreen: View {
                           allowsMultipleSelection: true) { handleImport($0) }
             .task { await bootstrap() }
             .refreshable { await load(reset: true) }
-            .alert("重命名", isPresented: Binding(
+            .alert("重命�?, isPresented: Binding(
                 get: { renameTarget != nil },
                 set: { if !$0 { renameTarget = nil } }
             )) {
-                TextField("新名称", text: $renameText)
+                TextField("新名�?, text: $renameText)
                 Button("取消", role: .cancel) { renameTarget = nil }
                 Button("确定") { Task { await doRename() } }
             } message: {
                 Text(renameTarget?.name ?? "")
             }
-            .alert("新建文件夹", isPresented: $showNewFolder) {
-                TextField("文件夹名称", text: $newFolderName)
+            .alert("新建文件�?, isPresented: $showNewFolder) {
+                TextField("文件夹名�?, text: $newFolderName)
                 Button("取消", role: .cancel) { newFolderName = "" }
                 Button("创建") { Task { await doMkdir() } }
             }
-            .alert("确定删除？", isPresented: Binding(
+            .alert("确定删除�?, isPresented: Binding(
                 get: { deleteTarget != nil },
                 set: { if !$0 { deleteTarget = nil } }
             ), presenting: deleteTarget) { file in
@@ -108,8 +104,8 @@ struct BrowseScreen: View {
                 Button("取消", role: .cancel) { deleteTarget = nil }
             } message: { file in
                 Text(file.isDir
-                     ? "「\(file.name)」及其中的全部内容都会被删除，此操作不可撤销。"
-                     : "「\(file.name)」将被永久删除。")
+                     ? "「\(file.name)」及其中的全部内容都会被删除，此操作不可撤销�?
+                     : "「\(file.name)」将被永久删除�?)
             }
             .sheet(isPresented: $showOfflineSheet) { offlineSheet }
             .overlay {
@@ -137,12 +133,12 @@ struct BrowseScreen: View {
             }
         } else if files.isEmpty {
             ScrollView {
-                EmptyState(title: "空目录", detail: "这里还没有文件。", symbol: "folder") {
+                EmptyState(title: "空目�?, detail: "这里还没有文件�?, symbol: "folder") {
                     HStack(spacing: OlSpace.xs) {
                         Button("上传文件") { showUploadPicker = true }
                             .buttonStyle(.bordered)
                             .buttonBorderShape(.capsule)
-                        Button("新建文件夹") { showNewFolder = true }
+                        Button("新建文件�?) { showNewFolder = true }
                             .buttonStyle(.bordered)
                             .buttonBorderShape(.capsule)
                     }
@@ -185,7 +181,7 @@ struct BrowseScreen: View {
                         let fav = prefs.isFavorite(serverId: serverId, path: file.path)
                         Button {
                             prefs.toggleFavorite(serverId: serverId, path: file.path)
-                            ToastCenter.shared.show(fav ? "已取消收藏" : "已收藏")
+                            ToastCenter.shared.show(fav ? "已取消收�? : "已收�?)
                         } label: {
                             Label("收藏", systemImage: "star")
                         }
@@ -199,7 +195,7 @@ struct BrowseScreen: View {
                     } label: {
                         HStack(spacing: 6) {
                             if loading { ProgressView().controlSize(.mini) }
-                            Text(loading ? "加载中…" : "加载更多（\(files.count)/\(total)）")
+                            Text(loading ? "加载中�? : "加载更多（\(files.count)/\(total)�?)
                                 .font(.footnote)
                         }
                         .padding(.vertical, 14)
@@ -259,11 +255,8 @@ struct BrowseScreen: View {
         .background(Color.clear)
     }
 
-    // MARK: - 面包屑
-
-    /// 面包屑：与列表卡片同样的缩进和圆角，悬浮而不是通栏贴边。
-    /// 最后一段是当前目录，导航栏已经有标题，所以这里只显示上级路径，避免重复。
-    @ViewBuilder
+    // MARK: - 面包�?
+    /// 面包屑：与列表卡片同样的缩进和圆角，悬浮而不是通栏贴边�?    /// 最后一段是当前目录，导航栏已经有标题，所以这里只显示上级路径，避免重复�?    @ViewBuilder
     private var breadcrumbBar: some View {
         let parts = path.split(separator: "/").map(String.init)
         if parts.count > 1 {
@@ -305,7 +298,6 @@ struct BrowseScreen: View {
                 .padding(.horizontal, OlSpace.md)
                 .padding(.vertical, 6)
             }
-            .scrollBounceBehavior(.basedOnSize)
             .background(Color.clear)
         }
     }
@@ -318,7 +310,7 @@ struct BrowseScreen: View {
                 Image(systemName: "line.3.horizontal.decrease")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
-                TextField("筛选", text: $filter)
+                TextField("筛�?, text: $filter)
                     .textFieldStyle(.plain)
                     .font(.subheadline)
             }
@@ -366,19 +358,19 @@ struct BrowseScreen: View {
                     }
                     .pickerStyle(.inline)
                     Toggle("升序", isOn: $sort.ascending)
-                    Toggle("文件夹优先", isOn: $sort.foldersFirst)
+                    Toggle("文件夹优�?, isOn: $sort.foldersFirst)
                 }
                 Section {
                     Toggle(isOn: $settings.showHidden) {
                         Label("显示隐藏文件", systemImage: "eye")
                     }
                     Toggle(isOn: $settings.autoRefresh) {
-                        Label("进入时自动刷新", systemImage: "arrow.clockwise")
+                        Label("进入时自动刷�?, systemImage: "arrow.clockwise")
                     }
                 }
                 Section {
                     Button { showNewFolder = true } label: {
-                        Label("新建文件夹", systemImage: "folder.badge.plus")
+                        Label("新建文件�?, systemImage: "folder.badge.plus")
                     }
                     Button { showOfflineSheet = true } label: {
                         Label("离线下载链接", systemImage: "arrow.down.circle")
@@ -418,19 +410,19 @@ struct BrowseScreen: View {
         Button {
             renameText = file.name
             renameTarget = file
-        } label: { Label("重命名", systemImage: "pencil") }
+        } label: { Label("重命�?, systemImage: "pencil") }
 
         let fav = prefs.isFavorite(serverId: serverId, path: file.path)
         Button {
             prefs.toggleFavorite(serverId: serverId, path: file.path)
-            ToastCenter.shared.show(fav ? "已取消收藏" : "已收藏")
+            ToastCenter.shared.show(fav ? "已取消收�? : "已收�?)
         } label: {
             Label(fav ? "取消收藏" : "收藏", systemImage: fav ? "star.slash" : "star")
         }
 
         Button {
             UIPasteboard.general.string = file.path
-            ToastCenter.shared.show("已复制路径")
+            ToastCenter.shared.show("已复制路�?)
         } label: { Label("复制路径", systemImage: "doc.on.doc") }
 
         Divider()
@@ -443,7 +435,7 @@ struct BrowseScreen: View {
 
     private func bootstrap() async {
         guard let server else {
-            errorText = "服务器已被删除"
+            errorText = "服务器已被删�?
             loading = false
             return
         }
@@ -467,7 +459,7 @@ struct BrowseScreen: View {
 
     private func download(_ file: RemoteFile) async {
         guard let server else { return }
-        busy = "准备下载…"
+        busy = "准备下载�?
         defer { busy = nil }
         do {
             let token = try await ensureToken(server)
@@ -485,7 +477,7 @@ struct BrowseScreen: View {
                               size: link.size > 0 ? link.size : file.size,
                               headers: headers,
                               fallbackUrl: link.fallbackUrl)
-            ToastCenter.shared.show("已加入下载队列")
+            ToastCenter.shared.show("已加入下载队�?)
         } catch {
             ToastCenter.shared.show((error as? ApiError)?.message ?? "获取下载地址失败")
         }
@@ -503,7 +495,7 @@ struct BrowseScreen: View {
             ToastCenter.shared.show("已重命名")
             await load(reset: true)
         } catch {
-            ToastCenter.shared.show((error as? ApiError)?.message ?? "重命名失败")
+            ToastCenter.shared.show((error as? ApiError)?.message ?? "重命名失�?)
         }
     }
 
@@ -515,7 +507,7 @@ struct BrowseScreen: View {
         do {
             let token = try await ensureToken(server)
             try await container.api.mkdir(baseUrl: server.url, token: token, parent: path, name: name)
-            ToastCenter.shared.show("已创建「\(name)」")
+            ToastCenter.shared.show("已创建「\(name)�?)
             await load(reset: true)
         } catch {
             ToastCenter.shared.show((error as? ApiError)?.message ?? "创建失败")
@@ -525,13 +517,13 @@ struct BrowseScreen: View {
     private func doDelete(_ file: RemoteFile) async {
         guard let server else { return }
         deleteTarget = nil
-        busy = "正在删除…"
+        busy = "正在删除�?
         defer { busy = nil }
         do {
             let token = try await ensureToken(server)
             try await container.api.remove(baseUrl: server.url, token: token,
                                            dir: PathUtil.parent(file.path), names: [file.name])
-            ToastCenter.shared.show("已删除「\(file.name)」")
+            ToastCenter.shared.show("已删除「\(file.name)�?)
             await load(reset: true)
         } catch {
             ToastCenter.shared.show((error as? ApiError)?.message ?? "删除失败")
@@ -550,7 +542,7 @@ struct BrowseScreen: View {
                     added += 1
                 } catch {
                     let reason = (error as? ApiError)?.message ?? error.localizedDescription
-                    Diagnostics.shared.error("入队失败：\(url.lastPathComponent) — \(reason)")
+                    Diagnostics.shared.error("入队失败：\(url.lastPathComponent) �?\(reason)")
                     ToastCenter.shared.show("「\(url.lastPathComponent)」失败：\(reason)")
                 }
             }
@@ -568,7 +560,7 @@ struct BrowseScreen: View {
 
     private func load(reset: Bool, refresh: Bool = true) async {
         guard let server else {
-            errorText = "服务器已被删除"
+            errorText = "服务器已被删�?
             loading = false
             return
         }
@@ -595,7 +587,7 @@ struct BrowseScreen: View {
             hasMore = result.perPage > 0 && files.count < total
         } catch let error as ApiError {
             errorText = error.message
-            if error.authRelated { ToastCenter.shared.show("登录已失效，请重新登录") }
+            if error.authRelated { ToastCenter.shared.show("登录已失效，请重新登�?) }
         } catch {
             errorText = error.localizedDescription
         }
@@ -615,7 +607,7 @@ struct BrowseScreen: View {
             hasMore = files.count < total
         } catch {
             page -= 1
-            ToastCenter.shared.show("加载下一页失败")
+            ToastCenter.shared.show("加载下一页失�?)
         }
     }
 
@@ -625,7 +617,7 @@ struct BrowseScreen: View {
         NavigationStack {
             Form {
                 Section("下载地址") {
-                    TextField("每行一个链接", text: $offlineURL, axis: .vertical)
+                    TextField("每行一个链�?, text: $offlineURL, axis: .vertical)
                         .lineLimit(3...8)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -641,7 +633,7 @@ struct BrowseScreen: View {
                     Button("提交到服务器") { Task { await submitOffline() } }
                         .disabled(offlineURL.trimmingCharacters(in: .whitespaces).isEmpty)
                 } footer: {
-                    Text("文件会下载到当前目录「\(path)」。需要服务端已配置 aria2 或 qBittorrent。")
+                    Text("文件会下载到当前目录「\(path)」。需要服务端已配�?aria2 �?qBittorrent�?)
                 }
             }
             .navigationTitle("离线下载")
@@ -660,7 +652,7 @@ struct BrowseScreen: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         guard !urls.isEmpty else { return }
-        busy = "提交中…"
+        busy = "提交中�?
         defer { busy = nil }
         do {
             let token = try await ensureToken(server)
@@ -669,15 +661,14 @@ struct BrowseScreen: View {
                                                        tool: settings.offlineTool)
             offlineURL = ""
             showOfflineSheet = false
-            ToastCenter.shared.show("已提交 \(urls.count) 个链接")
+            ToastCenter.shared.show("已提�?\(urls.count) 个链�?)
         } catch {
             ToastCenter.shared.show((error as? ApiError)?.message ?? "提交失败")
         }
     }
 }
 
-// MARK: - 行内容
-
+// MARK: - 行内�?
 struct FileRowContent: View {
 
     let file: RemoteFile
@@ -700,7 +691,7 @@ struct FileRowContent: View {
                     .truncationMode(.middle)
                     .foregroundStyle(.primary)
                 HStack(spacing: 5) {
-                    Text(file.isDir ? "文件夹" : Fmt.bytes(file.size))
+                    Text(file.isDir ? "文件�? : Fmt.bytes(file.size))
                     if !file.modified.isEmpty {
                         Text("·")
                         Text(Fmt.relative(file.modified))
