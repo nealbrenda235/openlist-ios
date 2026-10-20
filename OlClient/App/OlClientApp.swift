@@ -47,6 +47,13 @@ private struct RootView: View {
             .environmentObject(container.uploads)
             // ★ 强调色统一从这里下发，所有 @Environment(\.olAccent) 都能跟着变
             .olTint(settings.accent.color)
+            .background {
+                OlBackground(tone: settings.backgroundTone,
+                             style: settings.backgroundStyle,
+                             customColor: settings.customBackground)
+            }
+            .animation(.easeInOut(duration: 0.25), value: settings.backgroundTone)
+            .animation(.easeInOut(duration: 0.25), value: settings.backgroundStyle)
             .preferredColorScheme(settings.themeMode.colorScheme)
             // 换颜色时加一点动画，避免生硬
             .animation(.easeInOut(duration: 0.22), value: settings.accent)

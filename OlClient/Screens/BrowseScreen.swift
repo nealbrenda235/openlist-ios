@@ -155,10 +155,11 @@ struct BrowseScreen: View {
         }
     }
 
+    /// 每一项都是独立卡片（用户要求：所有目录都拆分，不再用「一大卡多行 + 分隔线」）
     private var list: some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(visibleFiles.enumerated()), id: \.element.id) { index, file in
+            LazyVStack(spacing: OlSpace.xs) {
+                ForEach(visibleFiles) { file in
                     Button {
                         open(file)
                     } label: {
@@ -166,14 +167,29 @@ struct BrowseScreen: View {
                                        token: server?.token ?? "",
                                        baseUrl: server?.url ?? "",
                                        iconSize: iconSize)
-                            .padding(.horizontal, OlSpace.md)
-                            .padding(.vertical, rowVerticalPadding)
+                            .padding(.horizontal, OlSpace.sm)
+                            .padding(.vertical, rowVerticalPadding + 2)
+                            .background {
+                                RoundedRectangle(cornerRadius: OlRadius.inner, style: .continuous)
+                                    .fill(Color(.secondarySystemGroupedBackground))
+                            }
                     }
                     .buttonStyle(.pressable)
                     .contextMenu { menu(for: file) }
-
-                    if index != visibleFiles.count - 1 {
-                        Divider().padding(.leading, iconSize + 26)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            deleteTarget = file
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                        let fav = prefs.isFavorite(serverId: serverId, path: file.path)
+                        Button {
+                            prefs.toggleFavorite(serverId: serverId, path: file.path)
+                            ToastCenter.shared.show(fav ? "已取消收藏" : "已收藏")
+                        } label: {
+                            Label("收藏", systemImage: "star")
+                        }
+                        .tint(.yellow)
                     }
                 }
 
@@ -181,24 +197,27 @@ struct BrowseScreen: View {
                     Button {
                         Task { await loadMore() }
                     } label: {
-                        Text(loading ? "加载中…" : "加载更多（\(files.count)/\(total)）")
-                            .font(.footnote)
-                            .padding(.vertical, 14)
-                            .frame(maxWidth: .infinity)
+                        HStack(spacing: 6) {
+                            if loading { ProgressView().controlSize(.mini) }
+                            Text(loading ? "加载中…" : "加载更多（\(files.count)/\(total)）")
+                                .font(.footnote)
+                        }
+                        .padding(.vertical, 14)
+                        .frame(maxWidth: .infinity)
+                        .background {
+                            RoundedRectangle(cornerRadius: OlRadius.inner, style: .continuous)
+                                .fill(Color.primary.opacity(0.04))
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .foregroundStyle(accent)
                 }
             }
-            .background {
-                RoundedRectangle(cornerRadius: OlRadius.card, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground))
-            }
-            .clipShape(RoundedRectangle(cornerRadius: OlRadius.card, style: .continuous))
             .padding(.horizontal, OlSpace.md)
             .padding(.vertical, OlSpace.xs)
         }
-        .background(Color(.systemGroupedBackground))
+        .olDockSafeArea()
+        .background(Color.clear)
     }
 
     private var grid: some View {
@@ -236,54 +255,58 @@ struct BrowseScreen: View {
             }
             .padding(OlSpace.md)
         }
-        .background(Color(.systemGroupedBackground))
+        .olDockSafeArea()
+        .background(Color.clear)
     }
 
     // MARK: - 面包屑
 
+    /// 面包屑：与列表卡片同样的缩进和圆角，悬浮而不是通栏贴边。
+    /// 最后一段是当前目录，导航栏已经有标题，所以这里只显示上级路径，避免重复。
     @ViewBuilder
     private var breadcrumbBar: some View {
         let parts = path.split(separator: "/").map(String.init)
-        if !parts.isEmpty {
+        if parts.count > 1 {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 5) {
                     Button {
                         nav.pop()
                     } label: {
-                        Image(systemName: "chevron.up")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(accent)
-                            .padding(.trailing, 2)
+                        HStack(spacing: 3) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 9, weight: .bold))
+                            Text(parts.count >= 2 ? parts[parts.count - 2] : "上级")
+                                .font(.caption.weight(.medium))
+                        }
+                        .foregroundStyle(accent)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(accent.opacity(0.11), in: Capsule())
                     }
                     .buttonStyle(.plain)
 
-                    ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+                    // 更早的路径段，用轻量样式
+                    let ancestors = Array(parts.dropLast(2))
+                    ForEach(Array(ancestors.enumerated()), id: \.offset) { index, part in
                         let accumulated = "/" + parts.prefix(index + 1).joined(separator: "/")
                         HStack(spacing: 5) {
-                            if index > 0 {
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(.quaternary)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(.quaternary)
+                            Button(part) {
+                                nav.push(.browse(serverId: serverId, path: accumulated))
                             }
-                            if index == parts.count - 1 {
-                                Text(part)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.primary)
-                            } else {
-                                Button(part) {
-                                    nav.push(.browse(serverId: serverId, path: accumulated))
-                                }
-                                .font(.caption)
-                                .buttonStyle(.plain)
-                                .foregroundStyle(accent)
-                            }
+                            .font(.caption)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
                         }
                     }
                 }
                 .padding(.horizontal, OlSpace.md)
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
             }
-            .background(.ultraThinMaterial)
+            .scrollBounceBehavior(.basedOnSize)
+            .background(Color.clear)
         }
     }
 
@@ -526,7 +549,9 @@ struct BrowseScreen: View {
                     try uploads.enqueue(fileURL: url, server: server, dir: path)
                     added += 1
                 } catch {
-                    ToastCenter.shared.show("「\(url.lastPathComponent)」上传失败")
+                    let reason = (error as? ApiError)?.message ?? error.localizedDescription
+                    Diagnostics.shared.error("入队失败：\(url.lastPathComponent) — \(reason)")
+                    ToastCenter.shared.show("「\(url.lastPathComponent)」失败：\(reason)")
                 }
             }
             if added > 0 { ToastCenter.shared.show("已加入上传队列（\(added) 个）") }

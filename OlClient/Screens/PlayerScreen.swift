@@ -34,7 +34,6 @@ struct PlayerScreen: View {
     var cookie: String? = nil
 
     @State private var player: AVPlayer?
-    @State private var keeper: StreamResourceLoader?
     @State private var title = ""
     @State private var loading = true
     @State private var errorText: String?
@@ -311,9 +310,8 @@ struct PlayerScreen: View {
             }
 
             // 用 resource loader 注入请求头（替代失效的 AVURLAssetHTTPHeaderFieldsKey）
-            let loader = StreamResourceLoader()
-            let (asset, keeper) = loader.makeAsset(url: url, headers: headers)
-            self.keeper = keeper
+            // makeAsset 内部已把 delegate 强引用到 asset 上，这里不需要再保活
+            let asset = StreamResourceLoader().makeAsset(url: url, headers: headers)
 
             let item = AVPlayerItem(asset: asset)
             item.preferredForwardBufferDuration = 5
@@ -418,7 +416,6 @@ struct PlayerScreen: View {
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
-        keeper = nil
     }
 }
 

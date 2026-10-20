@@ -39,6 +39,9 @@
 		A1000001000000000000022 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000022 /* DesignSystem.swift */; };
 		A1000001000000000000023 /* RouteDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000023 /* RouteDestination.swift */; };
 		A1000001000000000000031 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000031 /* Assets.xcassets */; };
+		A1000001000000000000041 /* Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000041 /* Diagnostics.swift */; };
+		A1000001000000000000042 /* BackgroundTone.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000042 /* BackgroundTone.swift */; };
+		A1000001000000000000043 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000043 /* ShareSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -76,6 +79,9 @@
 		A1000002000000000000022 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		A1000002000000000000023 /* RouteDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteDestination.swift; sourceTree = "<group>"; };
 		A1000002000000000000031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1000002000000000000041 /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
+		A1000002000000000000042 /* BackgroundTone.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundTone.swift; sourceTree = "<group>"; };
+		A1000002000000000000043 /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -124,6 +130,7 @@
 		A1000004000000000000004 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				A1000002000000000000041 /* Diagnostics.swift */,
 				A1000002000000000000021 /* StreamResourceLoader.swift */,
 				A1000002000000000000016 /* AdminApi.swift */,
 				A1000002000000000000004 /* Net.swift */,
@@ -140,6 +147,8 @@
 		A1000004000000000000005 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				A1000002000000000000043 /* ShareSheet.swift */,
+				A1000002000000000000042 /* BackgroundTone.swift */,
 				A1000002000000000000022 /* DesignSystem.swift */,
 				A100000200000000000001C /* GlassShell.swift */,
 				A100000200000000000001B /* Theme.swift */,
@@ -266,6 +275,9 @@
 				A1000001000000000000011 /* SearchScreen.swift in Sources */,
 				A1000001000000000000012 /* TasksScreen.swift in Sources */,
 				A1000001000000000000013 /* SettingsScreen.swift in Sources */,
+				A1000001000000000000043 /* ShareSheet.swift in Sources */,
+				A1000001000000000000042 /* BackgroundTone.swift in Sources */,
+				A1000001000000000000041 /* Diagnostics.swift in Sources */,
 				A1000001000000000000023 /* RouteDestination.swift in Sources */,
 				A1000001000000000000022 /* DesignSystem.swift in Sources */,
 				A1000001000000000000021 /* StreamResourceLoader.swift in Sources */,

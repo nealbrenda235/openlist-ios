@@ -37,7 +37,7 @@ enum Tab: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .files: return "folder.fill"
         case .search: return "magnifyingglass"
-        case .tasks: return "arrow.up.arrow.down.circle.fill"
+        case .tasks: return "arrow.up.arrow.down.square.fill"
         case .settings: return "gearshape.fill"
         }
     }
@@ -50,6 +50,7 @@ enum Route: Hashable {
     case admin(serverId: String)
     case editServer(serverId: String?)
     case appearance
+    case diagnostics
     case about
 }
 

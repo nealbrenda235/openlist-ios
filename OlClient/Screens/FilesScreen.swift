@@ -46,7 +46,8 @@ struct FilesScreen: View {
                 .padding(.horizontal, OlSpace.md)
                 .padding(.top, OlSpace.xs)
             }
-            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .olDockSafeArea()
+            .background(Color.clear)
             .navigationTitle("OpenList")
             .olGlassNavBarLarge()
             .toolbar {

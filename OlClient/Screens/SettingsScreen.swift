@@ -48,7 +48,8 @@ struct SettingsScreen: View {
                 .padding(.top, OlSpace.xs)
                 .padding(.bottom, 40)
             }
-            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .olDockSafeArea()
+            .background(Color.clear)
             .navigationTitle("设置")
             .olGlassNavBarLarge()
             .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
@@ -168,6 +169,58 @@ struct SettingsScreen: View {
                             }
                             Spacer()
                         }
+                    }
+                    .padding(OlSpace.md)
+
+                    Divider().padding(.horizontal, OlSpace.md)
+
+                    // 背景色（对齐 Android 版：5 种预设 + 自定义 + 渐变/纯色）
+                    VStack(alignment: .leading, spacing: OlSpace.xs) {
+                        Text("背景色").font(.caption).foregroundStyle(.secondary)
+
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 54), spacing: 10)], spacing: 10) {
+                            ForEach(BackgroundTone.allCases) { tone in
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        settings.backgroundTone = tone
+                                    }
+                                } label: {
+                                    VStack(spacing: 4) {
+                                        ZStack {
+                                            Circle()
+                                                .fill(tone == .system
+                                                      ? Color(.systemGroupedBackground)
+                                                      : (tone == .custom ? settings.customBackground : tone.baseColor))
+                                                .frame(width: 30, height: 30)
+                                                .overlay {
+                                                    Circle().strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.6)
+                                                }
+                                            if settings.backgroundTone == tone {
+                                                Image(systemName: "checkmark")
+                                                    .font(.system(size: 12, weight: .bold))
+                                                    .foregroundStyle(.white)
+                                                    .shadow(color: .black.opacity(0.35), radius: 1)
+                                            }
+                                        }
+                                        Text(tone.label)
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(settings.backgroundTone == tone ? accent : .secondary)
+                                    }
+                                }
+                                .buttonStyle(.pressable)
+                            }
+                        }
+
+                        if settings.backgroundTone == .custom {
+                            ColorPicker("自定义颜色", selection: $settings.customBackground, supportsOpacity: false)
+                                .font(.caption)
+                        }
+
+                        CapsuleSegmented(options: BackgroundStyle.allCases,
+                                         selection: $settings.backgroundStyle) { item in
+                            Text(item.label)
+                        }
+                        .padding(.top, 2)
                     }
                     .padding(OlSpace.md)
 
@@ -337,6 +390,24 @@ struct SettingsScreen: View {
             GlassCard(padding: 0) {
                 VStack(spacing: 0) {
                     Button {
+                        nav.push(.diagnostics)
+                    } label: {
+                        HStack {
+                            Text("诊断日志").font(.subheadline).foregroundStyle(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, OlSpace.md)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.pressable)
+
+                    Divider().padding(.leading, OlSpace.md)
+
+                    Button {
                         nav.push(.about)
                     } label: {
                         HStack {
@@ -484,7 +555,7 @@ struct AboutScreen: View {
             .padding(.horizontal, OlSpace.md)
             .padding(.bottom, 40)
         }
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .background(Color.clear)
         .navigationTitle("关于")
         .navigationBarTitleDisplayMode(.inline)
     }

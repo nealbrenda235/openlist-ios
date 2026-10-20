@@ -71,7 +71,9 @@ final class UploadManager: ObservableObject {
     // MARK: - 入队
 
     func enqueue(fileURL: URL, server: ServerConfig, dir: String) throws {
+        Diagnostics.shared.info("上传入队：\(fileURL.lastPathComponent) → \(dir)")
         let staged = try stage(fileURL)
+        Diagnostics.shared.info("已暂存到沙盒：\(staged.lastPathComponent)")
         let size = (try? FileManager.default.attributesOfItem(atPath: staged.path)[.size] as? Int64) ?? 0
         var item = UploadItem(name: fileURL.lastPathComponent,
                               serverId: server.id,
@@ -101,9 +103,23 @@ final class UploadManager: ObservableObject {
     private func stage(_ url: URL) throws -> URL {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        // 安全作用域文件必须可读，否则 copyItem 会抛错（用户看到的就是「点了没反应」）
+        guard FileManager.default.isReadableFile(atPath: url.path) else {
+            Diagnostics.shared.error("无法读取源文件：\(url.lastPathComponent)")
+            throw ApiError.local("无法读取「\(url.lastPathComponent)」，可能是权限未授予")
+        }
+
         let target = Self.stagingDir.appendingPathComponent("\(UUID().uuidString)-\(url.lastPathComponent)")
         try? FileManager.default.removeItem(at: target)
-        try FileManager.default.copyItem(at: url, to: target)
+        do {
+            try FileManager.default.copyItem(at: url, to: target)
+        } catch {
+            Diagnostics.shared.error("复制文件失败：\(error.localizedDescription)")
+            throw error
+        }
+        let size = (try? FileManager.default.attributesOfItem(atPath: target.path)[.size] as? Int64) ?? 0
+        Diagnostics.shared.info("暂存完成，大小 \(size) 字节")
         return target
     }
 
@@ -193,19 +209,30 @@ final class UploadManager: ObservableObject {
                 }
                 continue
             }
+            guard !server.token.isEmpty else {
+                update(item.id) {
+                    $0.state = .failed
+                    $0.error = "登录已失效，请在设置里重新登录服务器"
+                }
+                continue
+            }
             start(item, server: server)
             running += 1
         }
     }
 
     private func start(_ item: UploadItem, server: ServerConfig) {
-        guard !server.token.isEmpty else {
+        // 加载中的 server 可能是从 store 里取出的旧快照，token 也许已经被刷新过。
+        // 以 store 里的最新值为准；仍为空再判失败。
+        let live = servers.get(server.id) ?? server
+        guard !live.token.isEmpty else {
             update(item.id) {
                 $0.state = .failed
-                $0.error = "登录已失效，请重新登录服务器"
+                $0.error = "登录已失效，请在设置里重新登录服务器"
             }
             return
         }
+        let server = live
         let fileURL = Self.stagingDir.appendingPathComponent(item.localFile)
         guard let data = try? Data(contentsOf: fileURL) else {
             update(item.id) {
@@ -247,6 +274,7 @@ final class UploadManager: ObservableObject {
                     self.delegates.removeValue(forKey: item.id)
                     switch result {
                     case .success:
+                        Diagnostics.shared.info("上传成功：\(item.name)")
                         self.update(item.id) {
                             $0.state = .done
                             $0.uploaded = $0.size
@@ -255,6 +283,7 @@ final class UploadManager: ObservableObject {
                         self.flash = "「\(item.name)」上传完成"
                         try? FileManager.default.removeItem(at: fileURL)
                     case .failure(let failure):
+                        Diagnostics.shared.error("上传失败：\(item.name) — \(failure.message)")
                         self.update(item.id) {
                             $0.state = .failed
                             $0.error = failure.message
@@ -265,6 +294,8 @@ final class UploadManager: ObservableObject {
                 }
             }
         )
+
+        Diagnostics.shared.info("开始上传：\(item.name) → \(item.targetPath)（\(data.count) 字节）")
 
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
         let task = session.uploadTask(with: request, from: data)

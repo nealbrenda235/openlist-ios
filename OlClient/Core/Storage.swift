@@ -232,6 +232,23 @@ final class SettingsStore: ObservableObject {
     @Published var accent: AccentChoice {
         didSet { d.set(accent.rawValue, forKey: "ui.accent") }
     }
+    /// 页面背景色调（对齐 Android 的 BackgroundTone）
+    @Published var backgroundTone: BackgroundTone {
+        didSet { d.set(backgroundTone.rawValue, forKey: "ui.bgTone") }
+    }
+    /// 渐变 / 纯色
+    @Published var backgroundStyle: BackgroundStyle {
+        didSet { d.set(backgroundStyle.rawValue, forKey: "ui.bgStyle") }
+    }
+    /// 自定义背景色的 RGB 分量（0~1），tone == .custom 时生效
+    @Published var customBackground: Color {
+        didSet {
+            let ui = UIColor(customBackground)
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            ui.getRed(&r, green: &g, blue: &b, alpha: &a)
+            d.set([Double(r), Double(g), Double(b)], forKey: "ui.bgCustom")
+        }
+    }
     @Published var density: ListDensity {
         didSet { d.set(density.rawValue, forKey: "ui.density") }
     }
@@ -286,6 +303,14 @@ final class SettingsStore: ObservableObject {
         // 此时 self 尚未完成初始化（d 之外还有别的属性），会直接编译报错。
         _themeMode = Published(initialValue: ThemeMode(rawValue: d.string(forKey: "ui.theme") ?? "") ?? .system)
         _accent = Published(initialValue: AccentChoice(rawValue: d.string(forKey: "ui.accent") ?? "") ?? .teal)
+        _backgroundTone = Published(initialValue: BackgroundTone(rawValue: d.string(forKey: "ui.bgTone") ?? "") ?? .system)
+        _backgroundStyle = Published(initialValue: BackgroundStyle(rawValue: d.string(forKey: "ui.bgStyle") ?? "") ?? .gradient)
+        let customRGB = (d.array(forKey: "ui.bgCustom") as? [Double]) ?? [0.31, 0.48, 0.39]
+        _customBackground = Published(initialValue: Color(
+            red: customRGB.count == 3 ? customRGB[0] : 0.31,
+            green: customRGB.count == 3 ? customRGB[1] : 0.48,
+            blue: customRGB.count == 3 ? customRGB[2] : 0.39
+        ))
         _density = Published(initialValue: ListDensity(rawValue: d.string(forKey: "ui.density") ?? "") ?? .comfortable)
         _layout = Published(initialValue: ListLayout(rawValue: d.string(forKey: "ui.layout") ?? "") ?? .list)
         _sort = Published(initialValue: SortChoice(

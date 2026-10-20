@@ -26,9 +26,12 @@ struct RouteDestination: View {
         case let .admin(serverId):
             AdminScreen(serverId: serverId)
         case let .editServer(serverId):
-            EditServerScreen(server: serverId.flatMap { servers.get($0) })
+            // push 进已有 NavStack，不能让它再自带一层（否则导航失效）
+            EditServerScreen(server: serverId.flatMap { servers.get($0) }, wrapInNavigation: false)
         case .appearance:
             AppearanceScreen()
+        case .diagnostics:
+            DiagnosticsScreen()
         case .about:
             AboutScreen()
         }
