@@ -305,7 +305,6 @@ struct BrowseScreen: View {
                 .padding(.horizontal, OlSpace.md)
                 .padding(.vertical, 6)
             }
-            .scrollBounceBehavior(.basedOnSize)
             .background(Color.clear)
         }
     }
