@@ -2,18 +2,18 @@
 //  DesignSystem.swift
 //  OpenList iOS
 //
-//  iOS 26/27 风格的设计常量与组件。
+//  iOS 26 Liquid Glass 设计系统。
 //
-//  ## 这一版和上一版的区别
+//  ## 为什么之前「没有液态玻璃」
 //
-//  iOS 26 起 Apple 全面转向「Liquid Glass」：
-//  - 大圆角（卡片 20~26pt，按钮胶囊）
-//  - 材质分层：内容 − 浮层 − 高亮，每层都有自己的模糊与描边
-//  - 强调色只用于「可交互元素」，大面积留白
-//  - 数字用等宽（monospacedDigit），标题用 .rounded 更亲近
-//  - 分组不再用 insetGrouped 的灰底，改用「浮起的玻璃卡片」
+//  之前的构建跑在 macos-14 runner（Xcode 15/16，iOS 17/18 SDK）。
+//  `.glassEffect()`、`GlassEffectContainer`、`glassEffectID` 这些 API
+//  在 iOS 26 才出现，旧 SDK 里根本不存在，所以只能退回 `.ultraThinMaterial`
+//  —— 那是 iOS 15 的普通毛玻璃，看起来就是一块半透明灰，没有液态玻璃的
+//  折射、高光、边缘聚光和连续形状融合（morphing）。
 //
-//  这里把这些沉淀成常量 + 少量复用组件，避免每处各写一套。
+//  现在 CI 换成 macos-26（Xcode 26，iOS 26 SDK），这些 API 才真正可用。
+//  代码里保留 `if #available(iOS 26.0, *)` 回退，保证在老系统上仍能跑。
 //
 
 import SwiftUI
@@ -21,10 +21,9 @@ import SwiftUI
 // MARK: - 圆角与间距
 
 enum OlRadius {
-    static let card: CGFloat = 22
-    static let inner: CGFloat = 14
-    static let pill: CGFloat = 18
-    static let sheet: CGFloat = 28
+    static let card: CGFloat = 26
+    static let inner: CGFloat = 18
+    static let chip: CGFloat = 999
 }
 
 enum OlSpace {
@@ -32,95 +31,125 @@ enum OlSpace {
     static let xs: CGFloat = 8
     static let sm: CGFloat = 12
     static let md: CGFloat = 16
-    static let lg: CGFloat = 20
-    static let xl: CGFloat = 28
+    static let lg: CGFloat = 24
+    static let xl: CGFloat = 32
+}
+
+// MARK: - 可用性
+
+enum OlGlass {
+    /// 当前系统是否支持原生液态玻璃
+    static var isSupported: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
+    }
 }
 
 // MARK: - 玻璃卡片
 
-/// 浮起的玻璃卡片：内容区不再用系统灰底分组，改成这种带描边的半透明块。
+/// 一层液态玻璃。iOS 26 上用原生 glassEffect，老系统退回材质模糊。
 struct GlassCard<Content: View>: View {
 
     var padding: CGFloat = OlSpace.md
-    var corner: CGFloat = OlRadius.card
+    var cornerRadius: CGFloat = OlRadius.card
+    /// tint 会给玻璃染上一层强调色（用于高亮卡片）
+    var tint: Color? = nil
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            content()
+                .padding(padding)
+                .glassEffect(glass, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            content()
+                .padding(padding)
+                .background {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.8)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private var glass: Glass {
+        if let tint {
+            return .regular.tint(tint.opacity(0.22)).interactive()
+        }
+        return .regular
+    }
+}
+
+// MARK: - 强调色卡片（统计区）
+
+struct AccentCard<Content: View>: View {
+
+    let accent: Color
+    var padding: CGFloat = OlSpace.md
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         content()
             .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
             .background {
-                RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .fill(.thinMaterial)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: corner, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.7)
-                    }
+                ZStack {
+                    RoundedRectangle(cornerRadius: OlRadius.card, style: .continuous)
+                        .fill(accent.gradient)
+                    RoundedRectangle(cornerRadius: OlRadius.card, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.35), Color.white.opacity(0.02),
+                                         Color.black.opacity(0.10)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
             }
+            .overlay {
+                RoundedRectangle(cornerRadius: OlRadius.card, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.28), lineWidth: 0.9)
+            }
+            .shadow(color: accent.opacity(0.32), radius: 18, x: 0, y: 8)
     }
 }
 
-/// 强调色渐变卡片（用于统计、播放中的任务这类需要突出的块）。
-struct AccentCard<Content: View>: View {
+// MARK: - 胶囊分段
 
-    @Environment(\.olAccent) private var accent
-    var corner: CGFloat = OlRadius.card
-    @ViewBuilder var content: () -> Content
+struct CapsuleSegmented<Item: Hashable, Label: View>: View {
 
-    var body: some View {
-        content()
-            .padding(OlSpace.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .fill(gradient)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: corner, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.8)
-                    }
-                    .shadow(color: accent.opacity(0.24), radius: 14, x: 0, y: 6)
-            }
-    }
-
-    private var gradient: LinearGradient {
-        LinearGradient(
-            colors: [accent.opacity(0.92), accent.opacity(0.66)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-}
-
-// MARK: - 分段胶囊
-
-/// 分段控件（替代 Picker(.segmented)）：胶囊形浮起，选中项有实心胶囊滑动。
-struct CapsuleSegmented<T: Hashable, Label: View>: View {
-
-    let options: [T]
-    @Binding var selection: T
-    @ViewBuilder var label: (T) -> Label
+    let options: [Item]
+    @Binding var selection: Item
+    @ViewBuilder let label: (Item) -> Label
 
     @Environment(\.olAccent) private var accent
     @Namespace private var ns
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(options, id: \.self) { option in
+        HStack(spacing: 0) {
+            ForEach(options, id: \.self) { item in
+                let isOn = item == selection
                 Button {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-                        selection = option
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                        selection = item
                     }
                 } label: {
-                    label(option)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(selection == option ? Color.white : Color.secondary)
+                    label(item)
+                        .font(.subheadline.weight(isOn ? .semibold : .regular))
+                        .foregroundStyle(isOn ? accent : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                         .background {
-                            if selection == option {
+                            if isOn {
                                 Capsule(style: .continuous)
-                                    .fill(accent)
+                                    .fill(.background)
                                     .matchedGeometryEffect(id: "seg", in: ns)
+                                    .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
                             }
                         }
                         .contentShape(Capsule())
@@ -136,33 +165,27 @@ struct CapsuleSegmented<T: Hashable, Label: View>: View {
     }
 }
 
-// MARK: - 统计数字
+// MARK: - 统计磁贴
 
 struct StatTile: View {
 
     let value: String
     let label: String
-    var symbol: String? = nil
-
+    var tint: Color? = nil
     @Environment(\.olAccent) private var accent
 
     var body: some View {
-        VStack(spacing: 3) {
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(accent)
-                    .padding(.bottom, 1)
-            }
+        VStack(alignment: .leading, spacing: 2) {
             Text(value)
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .font(.system(.title3, design: .rounded).weight(.semibold))
                 .monospacedDigit()
+                .foregroundStyle(tint ?? accent)
                 .contentTransition(.numericText())
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -176,33 +199,65 @@ struct SectionHeader: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
             Spacer()
             if let trailing {
                 Text(trailing)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
             }
         }
         .padding(.horizontal, OlSpace.xxs)
     }
 }
 
-// MARK: - 可压缩按钮
+// MARK: - 按压反馈
 
-/// 按下时轻微缩放，给触觉之外的一点"按下去"的反馈。
 struct PressableStyle: ButtonStyle {
     var scale: CGFloat = 0.97
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
-            .opacity(configuration.isPressed ? 0.9 : 1)
-            .animation(.spring(response: 0.26, dampingFraction: 0.7), value: configuration.isPressed)
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .animation(.spring(response: 0.26, dampingFraction: 0.72), value: configuration.isPressed)
     }
 }
 
 extension ButtonStyle where Self == PressableStyle {
     static var pressable: PressableStyle { PressableStyle() }
+}
+
+// MARK: - 进度环
+
+struct ProgressRing: View {
+
+    let progress: Double
+    let tint: Color
+    var symbol: String? = nil
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(tint.opacity(0.16), lineWidth: 3)
+            Circle()
+                .trim(from: 0, to: min(max(progress, 0), 1))
+                .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.linear(duration: 0.25), value: progress)
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(tint)
+            } else {
+                Text("\(Int(progress * 100))")
+                    .font(.system(size: 9, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(tint)
+            }
+        }
+    }
 }

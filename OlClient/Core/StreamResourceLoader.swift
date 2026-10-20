@@ -2,178 +2,228 @@
 //  StreamResourceLoader.swift
 //  OpenList iOS
 //
-//  给 AVPlayer 的请求注入自定义 HTTP 头。
+//  给 AVPlayer 的请求注入鉴权头，并**真正支持流式 Range 传输**。
 //
-//  ## 为什么必须自己写这层
+//  ## 前两版为什么都播不了
 //
-//  `AVURLAssetHTTPHeaderFieldsKey` 是**私有 key**，在 AVPlayerItem 场景下经常不生效，
-//  请求实际发出时不带 Authorization，服务端 401/403 → 用户看到黑屏。
+//  v3：用私有的 `AVURLAssetHTTPHeaderFieldsKey` → 在 AVPlayerItem 下经常不生效。
 //
-//  正规做法：真实 URL 换成自定义 scheme（olstream://），由
-//  `AVAssetResourceLoaderDelegate` 接管，用 URLSession 带完整请求头去拉，边拉边喂。
+//  v4：改成 AVAssetResourceLoaderDelegate 了，但 delegate 被 weak 释放，
+//      报「不支持的 URL」。
 //
-//  ## 一个致命的坑（v3 踩过）
+//  v5（本版）修掉 v4 的另一个致命问题：
+//  v4 的实现是 `session.dataTask` 把整个响应收完，然后一次性
+//  `respond(with: data)` + `finishLoading()`。
+//  这对**大文件视频是死路**：
+//    - 数据要全下完才开始播，几十 MB 的视频要等很久，用户以为「播不了」
+//    - AVPlayer 请求的是 Range `bytes=0-1`（探测），服务端返回 206 + 2 字节，
+//      但 v4 却对 `dataRequest?.requestedLength` 不理会，Content-Length 也算错
+//    - 没有处理 `requestsAllDataToEndOfResource`，导致时长/seek 判断失效
 //
-//  `setDelegate(_:queue:)` **不持有** delegate（weak 引用）。
-//  如果写成 `setDelegate(StreamingDelegate(...), queue:)`，临时对象当场释放，
-//  播放器去找人处理 olstream:// 时 delegate 已经是 nil →
-//  报「不支持的 URL」，视频完全打不开。
-//
-//  所以这里用一个 `Session` 对象把 delegate 强引用住，并让 asset 持有 Session。
+//  正确做法：用 `URLSessionDataDelegate` **边收边喂**，
+//  每收到一段 chunk 就 `respond(with:)`，收完再 `finishLoading()`。
+//  这样播放器能立刻开始缓冲播放，也能自由 seek。
 //
 
 import Foundation
 import AVFoundation
-import MobileCoreServices
 import ObjectiveC
 
-/// 给 asset 挂一个强引用容器：往 Objective-C 关联对象里塞，
-/// 生命周期跟 asset 走，不需要调用方额外管理。
-private var kLoaderSessionKey: UInt8 = 0
+private var kLoaderKey: UInt8 = 0
 
 final class StreamResourceLoader {
 
-    private static let customScheme = "olstream"
+    private static let scheme = "olstream"
 
-    /// 把真实 URL 包成播放器可用的 asset，并保证 delegate 活到 asset 释放。
+    /// 把真实 URL 换成自定义 scheme，并把 delegate 强引用到 asset 上。
     func makeAsset(url: URL, headers: [String: String]) -> AVURLAsset {
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        components?.scheme = Self.customScheme
-        guard let fake = components?.url else {
-            // scheme 替换失败就返回原 asset（至少还能试一下无鉴权直链）
+        var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        comps?.scheme = Self.scheme
+        guard let fake = comps?.url else {
             return AVURLAsset(url: url)
         }
 
         let asset = AVURLAsset(url: fake)
         let session = Session(realURL: url, headers: headers)
-        asset.resourceLoader.setDelegate(session, queue: DispatchQueue(label: "io.openlist.streamloader"))
-        // ★ 关键：强引用住 session，否则 delegate 会被 weak 释放
-        objc_setAssociatedObject(asset, &kLoaderSessionKey, session, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        asset.resourceLoader.setDelegate(session, queue: session.queue)
+        // ★ 强引用：setDelegate 是 weak，不挂住就会被释放 → 「不支持的 URL」
+        objc_setAssociatedObject(asset, &kLoaderKey, session, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         return asset
     }
 
     // MARK: - Session
 
-    /// 持有 delegate 与实际请求逻辑。必须是 class 且被强引用。
-    final class Session: NSObject, AVAssetResourceLoaderDelegate {
+    final class Session: NSObject, AVAssetResourceLoaderDelegate, URLSessionDataDelegate {
 
+        let queue: OperationQueue
         private let realURL: URL
         private let headers: [String: String]
-        private let queue = DispatchQueue(label: "io.openlist.streamloader.session")
-        private var sessions: [ObjectIdentifier: URLSession] = [:]
+
+        private var urlSession: URLSession!
+        /// taskIdentifier -> 正在处理的 loadingRequest
+        private var pending: [Int: AVAssetResourceLoadingRequest] = [:]
 
         init(realURL: URL, headers: [String: String]) {
             self.realURL = realURL
             self.headers = headers
-        }
-
-        // MARK: 核心
-
-        func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
-                            shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
-            guard let fake = loadingRequest.request.url else { return false }
-
-            var request = URLRequest(url: realURL)
-            for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-
-            // 原样转发 Range：拖动进度条、识别时长的前提
-            if let range = fake.query.flatMap(Self.rangeFromQuery) {
-                request.setValue(range, forHTTPHeaderField: "Range")
-            } else if let range = loadingRequest.request.allHTTPHeaderFields?["Range"] {
-                request.setValue(range, forHTTPHeaderField: "Range")
-            }
+            self.queue = OperationQueue()
+            self.queue.maxConcurrentOperationCount = 1
+            super.init()
 
             let cfg = URLSessionConfiguration.default
             cfg.timeoutIntervalForRequest = 30
             cfg.timeoutIntervalForResource = 3600
             cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
-            let session = URLSession(configuration: cfg)
-            let key = ObjectIdentifier(loadingRequest)
-            queue.sync { sessions[key] = session }
+            urlSession = URLSession(configuration: cfg, delegate: self, delegateQueue: queue)
+        }
 
-            let task = session.dataTask(with: request) { [weak self] data, response, error in
-                self?.queue.sync { self?.sessions.removeValue(forKey: key) }
-                session.invalidateAndCancel()
+        // MARK: AVAssetResourceLoaderDelegate
 
-                if let error {
-                    loadingRequest.finishLoading(with: error)
-                    return
-                }
-                guard let http = response as? HTTPURLResponse else {
-                    loadingRequest.finishLoading(with: NSError(
-                        domain: NSURLErrorDomain, code: NSURLErrorBadServerResponse,
-                        userInfo: [NSLocalizedDescriptionKey: "服务端响应无效"]))
-                    return
-                }
+        func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
+                            shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
 
-                guard (200..<300).contains(http.statusCode) || http.statusCode == 206 else {
-                    let reason: String
-                    switch http.statusCode {
-                    case 401, 403:
-                        reason = "服务端拒绝了访问（HTTP \(http.statusCode)）。\n可能是登录已过期，或该直链需要重新签名。"
-                    case 404:
-                        reason = "文件不存在（HTTP 404）"
-                    case 416:
-                        reason = "请求范围无效（HTTP 416）"
-                    default:
-                        reason = "播放失败：HTTP \(http.statusCode)"
-                    }
-                    loadingRequest.finishLoading(with: NSError(
-                        domain: NSURLErrorDomain, code: http.statusCode,
-                        userInfo: [NSLocalizedDescriptionKey: reason]))
-                    return
-                }
+            var request = URLRequest(url: realURL)
+            for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
 
-                if let info = loadingRequest.contentInformationRequest {
-                    info.contentType = Self.mimeType(http, incoming: loadingRequest.contentInformationRequest?.contentType)
-                    info.isByteRangeAccessSupported = http.statusCode == 206
-                        || http.value(forHTTPHeaderField: "Accept-Ranges")?.lowercased() == "bytes"
-                    if let lenText = http.value(forHTTPHeaderField: "Content-Length"), let len = Int64(lenText) {
-                        info.contentLength = len
-                    } else if let rangeText = http.value(forHTTPHeaderField: "Content-Range"),
-                              let total = Self.totalFromContentRange(rangeText) {
-                        info.contentLength = total
-                    }
-                }
-
-                if let data, !data.isEmpty {
-                    loadingRequest.dataRequest?.respond(with: data)
-                }
-                loadingRequest.finishLoading()
+            // 转发 Range：AVPlayer 会在 request 里塞它，也可能塞在 fake URL 的 query
+            var rangeHeader: String?
+            if let r = loadingRequest.request.value(forHTTPHeaderField: "Range"), r.hasPrefix("bytes=") {
+                rangeHeader = r
+            } else if let q = loadingRequest.request.url?.query, q.hasPrefix("bytes=") {
+                rangeHeader = q
+            }
+            if let rangeHeader {
+                request.setValue(rangeHeader, forHTTPHeaderField: "Range")
             }
 
+            let task = urlSession.dataTask(with: request)
+            pending[task.taskIdentifier] = loadingRequest
             task.resume()
             return true
         }
 
         func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
                             didCancel loadingRequest: AVAssetResourceLoadingRequest) {
-            queue.sync {
-                let key = ObjectIdentifier(loadingRequest)
-                sessions[key]?.invalidateAndCancel()
-                sessions.removeValue(forKey: key)
+            for (id, req) in pending where req === loadingRequest {
+                pending.removeValue(forKey: id)
+                urlSession.getAllTasks { tasks in
+                    tasks.first { $0.taskIdentifier == id }?.cancel()
+                }
+                break
+            }
+        }
+
+        // MARK: URLSessionDataDelegate —— 边收边喂
+
+        func urlSession(_ session: URLSession,
+                        dataTask: URLSessionDataTask,
+                        didReceive response: URLResponse,
+                        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+
+            guard let req = pending[dataTask.taskIdentifier] else {
+                completionHandler(.cancel)
+                return
+            }
+            guard let http = response as? HTTPURLResponse else {
+                finish(req, error: NSError(domain: NSURLErrorDomain,
+                                           code: NSURLErrorBadServerResponse,
+                                           userInfo: [NSLocalizedDescriptionKey: "服务端响应无效"]))
+                completionHandler(.cancel)
+                return
+            }
+
+            // 鉴权失败要给出明确原因，否则用户只看到黑屏
+            guard (200..<300).contains(http.statusCode) else {
+                let reason: String
+                switch http.statusCode {
+                case 401, 403:
+                    reason = "服务端拒绝访问（HTTP \(http.statusCode)）。\n登录可能已过期，或该直链需要重新签名。"
+                case 404:
+                    reason = "文件不存在（HTTP 404）"
+                case 416:
+                    reason = "请求范围无效（HTTP 416）"
+                default:
+                    reason = "播放失败：HTTP \(http.statusCode)"
+                }
+                finish(req, error: NSError(domain: NSURLErrorDomain,
+                                           code: http.statusCode,
+                                           userInfo: [NSLocalizedDescriptionKey: reason]))
+                completionHandler(.cancel)
+                return
+            }
+
+            // 填 contentInformation —— 这是播放器判断能不能播的关键
+            if let info = req.contentInformationRequest {
+                info.contentType = Self.mimeType(http, fallback: info.contentType)
+                info.isByteRangeAccessSupported =
+                    http.statusCode == 206
+                    || (http.value(forHTTPHeaderField: "Accept-Ranges")?.lowercased() == "bytes")
+                if let lenText = http.value(forHTTPHeaderField: "Content-Range"),
+                   let total = Self.totalFromRange(lenText) {
+                    info.contentLength = total
+                } else if let lenText = http.value(forHTTPHeaderField: "Content-Length"),
+                          let len = Int64(lenText) {
+                    info.contentLength = len
+                }
+            }
+
+            completionHandler(.allow)
+        }
+
+        func urlSession(_ session: URLSession,
+                        dataTask: URLSessionDataTask,
+                        didReceive data: Data) {
+            guard let req = pending[dataTask.taskIdentifier],
+                  let dataRequest = req.dataRequest else { return }
+
+            // 只喂播放器要的那一段，避免越界
+            if dataRequest.requestsAllDataToEndOfResource {
+                dataRequest.respond(with: data)
+            } else {
+                var remaining = data
+                while !remaining.isEmpty {
+                    let needed = dataRequest.requestedOffset + Int64(dataRequest.requestedLength)
+                    let offset = dataRequest.currentOffset
+                    if offset >= needed { break }
+                    let available = Int64(remaining.count)
+                    let take = min(needed - offset, available)
+                    if take <= 0 { break }
+                    dataRequest.respond(with: remaining.prefix(Int(take)))
+                    remaining = remaining.dropFirst(Int(take))
+                }
+            }
+        }
+
+        func urlSession(_ session: URLSession,
+                        task: URLSessionTask,
+                        didCompleteWithError error: Error?) {
+            guard let req = pending.removeValue(forKey: task.taskIdentifier) else { return }
+            if let error {
+                let ns = error as NSError
+                // 播放器主动取消时不算错误
+                if ns.code == NSURLErrorCancelled { return }
+                finish(req, error: error)
+            } else {
+                if !req.isFinished { req.finishLoading() }
             }
         }
 
         // MARK: 工具
 
-        private static func mimeType(_ response: HTTPURLResponse, incoming: String?) -> String {
-            if let type = response.mimeType, !type.isEmpty, type != "application/octet-stream" {
-                return type
-            }
-            if let incoming, !incoming.isEmpty { return incoming }
+        private func finish(_ req: AVAssetResourceLoadingRequest, error: Error) {
+            if !req.isFinished { req.finishLoading(with: error) }
+        }
+
+        private static func mimeType(_ response: HTTPURLResponse, fallback: String?) -> String {
+            if let t = response.mimeType, !t.isEmpty, t != "application/octet-stream" { return t }
+            if let f = fallback, !f.isEmpty { return f }
             return "video/mp4"
         }
 
-        private static func totalFromContentRange(_ text: String) -> Int64? {
+        private static func totalFromRange(_ text: String) -> Int64? {
             guard let slash = text.lastIndex(of: "/") else { return nil }
-            return Int64(text[text.index(after: slash)...])
-        }
-
-        /// AVPlayer 有时把 Range 放在原 URL 的 query 里
-        private static func rangeFromQuery(_ query: String) -> String? {
-            guard query.contains("bytes=") else { return nil }
-            return query
+            let total = text[text.index(after: slash)...]
+            return Int64(total)
         }
     }
 }

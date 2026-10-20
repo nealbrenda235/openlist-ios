@@ -390,35 +390,6 @@ struct TasksScreen: View {
 
 // MARK: - 进度环
 
-struct ProgressRing: View {
-
-    let progress: Double
-    let tint: Color
-    var symbol: String? = nil
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.primary.opacity(0.08), lineWidth: 3)
-            Circle()
-                .trim(from: 0, to: max(0.001, min(1, progress)))
-                .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(.easeInOut(duration: 0.25), value: progress)
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(tint)
-            } else {
-                Text("\(Int(progress * 100))")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
 // MARK: - QuickLook
 
 struct QLItem: Identifiable {

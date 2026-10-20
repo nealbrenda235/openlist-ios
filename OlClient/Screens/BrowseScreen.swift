@@ -79,7 +79,15 @@ struct BrowseScreen: View {
             .olGlassNavBar()
             .toolbar { toolbar }
             .safeAreaInset(edge: .top, spacing: 0) { breadcrumbBar }
-            .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
+            // ★ 工具栏与 Dock 占位必须合成同一个 bottom inset。
+            //   分成两个 safeAreaInset(edge:.bottom) 会互相覆盖（实测会遮挡）。
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 0) {
+                    bottomBar
+                    // 给悬浮 Dock 让出的空间
+                    Color.clear.frame(height: DockMetrics.reservedHeight)
+                }
+            }
             .fileImporter(isPresented: $showUploadPicker,
                           allowedContentTypes: [.item],
                           allowsMultipleSelection: true) { handleImport($0) }
@@ -216,7 +224,6 @@ struct BrowseScreen: View {
             .padding(.horizontal, OlSpace.md)
             .padding(.vertical, OlSpace.xs)
         }
-        .olDockSafeArea()
         .background(Color.clear)
     }
 
@@ -255,7 +262,6 @@ struct BrowseScreen: View {
             }
             .padding(OlSpace.md)
         }
-        .olDockSafeArea()
         .background(Color.clear)
     }
 

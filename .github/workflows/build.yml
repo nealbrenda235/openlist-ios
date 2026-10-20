@@ -8,53 +8,71 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
-    timeout-minutes: 40
+    # ★ 关键：macos-26 是唯一预装 Xcode 26 的镜像，
+    # 只有它才有 iOS 26 SDK，才能编译出 Liquid Glass（液态玻璃）效果。
+    # macos-14 （之前用的）只有 Xcode 15/16，glassEffect 等 API 完全不存在，
+    # 所以之前所有「液态玻璃」写法都被降级成了普通 blur。
+    runs-on: macos-26
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show toolchain
+      - name: Select Xcode 26 and show toolchain
         run: |
+          set -euo pipefail
+          # 优先选最新的 Xcode 26.x（不要 27 beta，避免 SDK 行为变动）
+          if [ -d /Applications/Xcode_26.6.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.6.app
+          elif [ -d /Applications/Xcode_26.5.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.5.app
+          else
+            ls -d /Applications/Xcode*.app || true
+          fi
           xcodebuild -version
-          swift --version
-          xcodebuild -list -project OlClient.xcodeproj
+          echo "---- installed SDKs ----"
+          xcodebuild -showsdks | grep -i iphone || true
 
       - name: Build unsigned app
         run: |
           set -o pipefail
+          # 先跑一次，日志落到 build.log，便于失败时提取错误
           xcodebuild \
             -project OlClient.xcodeproj \
             -scheme OpenList \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
+            IPHONEOS_DEPLOYMENT_TARGET=17.0 \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_ENTITLEMENTS="" \
             DEVELOPMENT_TEAM="" \
-            ENABLE_BITCODE=NO \
-            build 2>&1 | tee build.log
+            > build.log 2>&1 || true
 
-      - name: Show errors on failure
-        if: failure()
-        run: |
-          echo "================ 编译错误 ================"
-          grep -E "error:" build.log || echo "（未找到 error: 行，检查上方日志）"
-          echo "================ 警告统计 ================"
-          grep -c "warning:" build.log || true
-
-      - name: Package IPA
-        if: success()
-        run: |
-          APP="build/Build/Products/Release-iphoneos/OpenList.app"
-          if [ ! -d "$APP" ]; then
-            echo "构建产物不存在：$APP"
-            ls -R build/Build/Products || true
+          echo "===== build finished, exit code captured ====="
+          # 提取所有编译错误
+          if grep -q ": error:" build.log; then
+            echo "---- ERRORS ----"
+            grep ": error:" build.log | head -40
+            echo "---- END ----"
             exit 1
           fi
+
+          # 没有 error 才算成功，但仍要确认产物存在
+          if [ ! -d "build/Build/Products/Release-iphoneos/OpenList.app" ]; then
+            echo "---- 构建产物不存在，最后 80 行日志 ----"
+            tail -80 build.log
+            exit 1
+          fi
+          echo "build ok"
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release-iphoneos/OpenList.app"
           rm -rf Payload OpenList.ipa
           mkdir -p Payload
           cp -R "$APP" Payload/
@@ -63,16 +81,16 @@ jobs:
           shasum -a 256 OpenList.ipa
 
       - name: Upload IPA
-        if: success()
         uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: OpenList-ipa
           path: OpenList.ipa
           retention-days: 30
 
       - name: Upload build log
-        if: always()
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: build-log
           path: build.log

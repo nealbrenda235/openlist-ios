@@ -2,88 +2,32 @@
 //  GlassShell.swift
 //  OpenList iOS
 //
-//  悬浮毛玻璃 Dock + 顶栏模糊。
+//  悬浮液态玻璃 Dock。
 //
-//  ## 遮挡问题是怎么解决的
+//  ## 遮挡问题改了三版，这是第四版
 //
-//  v3 用 `safeAreaInset(edge: .bottom) { Color.clear.frame(height: 74) }` 给 Dock 让位。
-//  但页面都是 ScrollView，这个 inset 只影响容器自身布局，**滚动内容并不会因此多出
-//  可滚动的底部空间** —— 所以最后一屏内容会滑到 Dock 下面被盖住（用户实测每页都有）。
+//  v3 `safeAreaInset { Color.clear }` —— 垫透明块，但 ScrollView 不认，照样遮挡。
+//  v4 `contentMargins` + Environment —— 方向对，但值下发在 NavigationStack 外部，
+//     传不进 ScrollView，等于没设。
+//  v5 每个页面各自 `safeAreaInset` —— 对单页有效，但 BrowseScreen 自己有底部工具栏，
+//     两个 bottom safeAreaInset 互相覆盖，Dock 空间被工具栏吞掉（用户实测仍遮挡）。
 //
-//  正确做法：把「Dock 高度 + 安全区」作为 ScrollView 的 contentMargin 传下去，
-//  让滚动内容真的能滚出这个高度。这里用一个 Environment 值传递，
-//  各页面的 ScrollView 统一读取，避免每处硬编码。
+//  v6（本版）统一策略：
+//  - 用**唯一一个** `safeAreaInset(edge: .bottom)` 交出全部底部空间
+//  - 页面若自带工具栏，就把「工具栏 + Dock 占位」合进同一个 inset
 //
 
 import SwiftUI
 
-// MARK: - Dock 占位高度（供各页面 ScrollView 用）
+// MARK: - Dock 尺寸（全局唯一定义，避免多处重复声明）
 
-private struct DockInsetKey: EnvironmentKey {
-    static let defaultValue: CGFloat = 0
-}
-
-extension EnvironmentValues {
-    /// 底部需要为 Dock 预留的高度。0 表示当前页面没有 Dock。
-    var olDockInset: CGFloat {
-        get { self[DockInsetKey.self] }
-        set { self[DockInsetKey.self] = newValue }
-    }
-}
-
-extension View {
-    /// 给滚动内容底部补足 Dock 占用的空间。
-    /// - Parameter extra: 额外留白（一般给 8~16，避免内容紧贴 Dock）。
-    @ViewBuilder
-    func olDockSafeArea(extra: CGFloat = 12) -> some View {
-        modifier(DockSafeAreaModifier(extra: extra))
-    }
-}
-
-private struct DockSafeAreaModifier: ViewModifier {
-
-    @Environment(\.olDockInset) private var inset
-    let extra: CGFloat
-
-    func body(content: Content) -> some View {
-        let total = inset + extra
-        if #available(iOS 17.0, *) {
-            content.contentMargins(.bottom, inset > 0 ? total : 0, for: .scrollContent)
-        } else {
-            // iOS 16：用一个不可见占位行撑出同样的滚动空间
-            content.safeAreaInset(edge: .bottom, spacing: 0) {
-                if inset > 0 {
-                    Color.clear.frame(height: total)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Dock 背景
-
-private struct DockBackground: View {
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .fill(.ultraThinMaterial)
-            .overlay(stroke)
-            .shadow(color: Color.black.opacity(0.16), radius: 20, x: 0, y: 8)
-            .shadow(color: Color.black.opacity(0.06), radius: 2, x: 0, y: 1)
-    }
-
-    private var stroke: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .strokeBorder(dockEdge, lineWidth: 0.8)
-    }
-
-    private var dockEdge: LinearGradient {
-        LinearGradient(
-            colors: [Color.white.opacity(0.30), Color.white.opacity(0.04)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-    }
+enum DockMetrics {
+    /// 胶囊本体高 52 + 上下 padding 8·2
+    static let dockHeight: CGFloat = 52 + 16
+    /// 滚动内容需要避让的总高度（Dock + 与最后一项的间隙）
+    static let totalHeight: CGFloat = dockHeight + 12
+    /// 带底部工具栏的页面复用同一数值
+    static let reservedHeight: CGFloat = totalHeight
 }
 
 // MARK: - Dock 按钮
@@ -98,24 +42,24 @@ private struct DockButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 3) {
-                // 四个 Tab 统一用「镂空 → 实心」表达选中，
-                // 不再给「任务」换带圈图标（那会让它看起来比其他三项小一圈）
                 Image(systemName: isSelected ? item.selectedSymbol : item.symbol)
-                    .font(.system(size: 19, weight: isSelected ? .semibold : .regular))
-                    .frame(height: 21)
+                    .font(.system(size: 20, weight: isSelected ? .semibold : .regular))
+                    // ★ 固定 24×24 容器：四个 SF Symbol 固有宽高比不同，
+                    //   不固定会让「任务」的箭头在选中换图标时看起来变小。
+                    .frame(width: 24, height: 24)
                 Text(item.label)
                     .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
             }
             .foregroundStyle(isSelected ? accent : Color.secondary)
             .frame(maxWidth: .infinity)
-            .frame(height: 50)
+            .frame(height: 52)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 }
 
-// MARK: - 悬浮 Dock
+// MARK: - Dock 本体（液态玻璃）
 
 struct FloatingDock: View {
 
@@ -123,67 +67,75 @@ struct FloatingDock: View {
     @Environment(\.olAccent) private var accent
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Tab.allCases) { item in
-                DockButton(
-                    item: item,
-                    isSelected: selection == item,
-                    accent: accent,
-                    action: { select(item) }
-                )
+        if #available(iOS 26.0, *) {
+            // iOS 26：原生液态玻璃。GlassEffectContainer 让玻璃元素在空间上融合，
+            // 这是液态玻璃区别于普通毛玻璃的关键特征。
+            GlassEffectContainer(spacing: 0) {
+                HStack(spacing: 0) { buttons }
+                    .frame(height: DockMetrics.dockHeight - 16)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+            }
+            .padding(.horizontal, OlSpace.xl + 8)
+            .padding(.bottom, OlSpace.xs)
+        } else {
+            HStack(spacing: 0) { buttons }
+                .frame(height: DockMetrics.dockHeight - 16)
+                .background {
+                    Capsule(style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay {
+                            Capsule(style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.8)
+                        }
+                }
+                .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+                .padding(.horizontal, OlSpace.xl + 8)
+                .padding(.bottom, OlSpace.xs)
+        }
+    }
+
+    private var buttons: some View {
+        ForEach(Tab.allCases) { item in
+            DockButton(item: item,
+                       isSelected: selection == item,
+                       accent: accent) {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) {
+                    selection = item
+                }
             }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 5)
-        .background { DockBackground() }
-        .padding(.horizontal, 32)
-    }
-
-    private func select(_ item: Tab) {
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) {
-            selection = item
-        }
     }
 }
 
-// MARK: - 带悬浮 Dock 的页面壳
+// MARK: - 底部让位
 
-struct DockShell<Content: View>: View {
-
-    @Binding var selection: Tab
-    @ViewBuilder var content: () -> Content
-
-    /// Dock 本身约 60pt + 与安全区之间的 8pt 间隙
-    private let dockHeight: CGFloat = 68
-
+private struct DockSpacer: View {
+    let height: CGFloat
     var body: some View {
-        ZStack(alignment: .bottom) {
-            content()
-                .environment(\.olDockInset, dockHeight)
-
-            FloatingDock(selection: $selection)
-                .padding(.bottom, 2)
-        }
-        // Dock 浮在固定底部安全区之上，页面内容通过 olDockInset 自觉让位
-        .ignoresSafeArea(.keyboard, edges: .bottom)
+        Color.clear.frame(height: height)
     }
 }
-
-// MARK: - 顶栏毛玻璃
 
 extension View {
-    /// 让导航栏常驻毛玻璃，滚动时内容从模糊层下面穿过。
-    func olGlassNavBar() -> some View {
-        self
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+    /// 给根级页面底部留出悬浮 Dock 的高度。
+    ///
+    /// ★ 重要：同一页面**不能**再加第二个 `safeAreaInset(edge: .bottom)`，
+    ///   两个会互相覆盖。若页面自带底部工具栏，请把工具栏和
+    ///   `Color.clear.frame(height: DockMetrics.reservedHeight)` 合进同一个 inset。
+    func olDockSafeArea() -> some View {
+        self.safeAreaInset(edge: .bottom, spacing: 0) {
+            DockSpacer(height: DockMetrics.totalHeight)
+        }
     }
 
-    /// 大标题页面的顶栏（用于根级页面）。
+    /// 顶栏毛玻璃。
+    func olGlassNavBar() -> some View {
+        self.toolbarBackground(.visible, for: .navigationBar)
+    }
+
     func olGlassNavBarLarge() -> some View {
         self
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .navigationBarTitleDisplayMode(.large)
     }
 }
