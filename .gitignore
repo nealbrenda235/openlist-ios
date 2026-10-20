@@ -1,0 +1,11 @@
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+Payload/
+*.ipa
+
+# SSH 私钥与部署配置，绝不提交
+.deploy/
+
