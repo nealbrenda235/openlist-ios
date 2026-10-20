@@ -1,0 +1,8 @@
+﻿# 统一使用 LF，保证在 macOS 上编译时行尾一致
+* text=auto eol=lf
+
+# 二进制文件不做转换
+*.ipa binary
+*.png binary
+*.jpg binary
+*.zip binary
