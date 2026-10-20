@@ -31,6 +31,16 @@ enum Tab: String, CaseIterable, Identifiable, Hashable {
         case .settings: return "gearshape"
         }
     }
+
+    /// 选中态图标（实心版），用于 Dock 高亮。
+    var selectedSymbol: String {
+        switch self {
+        case .files: return "folder.fill"
+        case .search: return "magnifyingglass"
+        case .tasks: return "arrow.up.arrow.down.circle.fill"
+        case .settings: return "gearshape.fill"
+        }
+    }
 }
 
 enum Route: Hashable {
