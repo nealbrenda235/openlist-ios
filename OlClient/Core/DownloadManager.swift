@@ -216,19 +216,29 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     /// 当前是否允许下载（仅 Wi-Fi 开关生效时必须检查，否则设置形同虚设）。
+    /// 仅 Wi-Fi 开关生效时必须检查网络类型，否则设置形同虚设。
+    /// 用引用类型承载结果，避免闭包里直接改捕获的 var（Swift 6 会报并发错误）。
+    private final class WifiProbe {
+        private let lock = NSLock()
+        private var value = false
+        func set(_ v: Bool) { lock.lock(); value = v; lock.unlock() }
+        func get() -> Bool { lock.lock(); defer { lock.unlock() }; return value }
+    }
+
     private var networkAllowed: Bool {
         guard settings.downloadWifiOnly else { return true }
         let monitor = NWPathMonitor()
         let sema = DispatchSemaphore(value: 0)
-        var wifi = false
+        let probe = WifiProbe()
         monitor.pathUpdateHandler = { path in
-            wifi = path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet)
+            let ok = path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet)
+            probe.set(ok)
             sema.signal()
         }
         monitor.start(queue: DispatchQueue.global())
         _ = sema.wait(timeout: .now() + 1.0)
         monitor.cancel()
-        return wifi
+        return probe.get()
     }
 
     private func pump() {

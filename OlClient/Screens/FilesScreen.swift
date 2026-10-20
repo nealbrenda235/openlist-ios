@@ -296,7 +296,7 @@ struct FilesScreen: View {
 
     // MARK: - 数据
 
-    private func favoriteRows() -> [(key: String, serverId: String, serverName: String, path: String)] {
+    private var favoriteRows: [(key: String, serverId: String, serverName: String, path: String)] {
         prefs.favorites.compactMap { key in
             guard let (sid, path) = FilePrefs.split(key),
                   let server = servers.get(sid) else { return nil }
