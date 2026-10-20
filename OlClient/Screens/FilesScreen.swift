@@ -121,7 +121,7 @@ struct FilesScreen: View {
     // MARK: - 统计卡
 
     private var summaryCard: some View {
-        AccentCard {
+        AccentCard(accent: accent) {
             HStack(spacing: 0) {
                 tile("\(onlineCount)/\(servers.servers.count)", "在线", "wifi")
                 divider

@@ -45,7 +45,7 @@ final class StreamResourceLoader {
 
         let asset = AVURLAsset(url: fake)
         let session = Session(realURL: url, headers: headers)
-        asset.resourceLoader.setDelegate(session, queue: session.queue)
+        asset.resourceLoader.setDelegate(session, queue: session.dispatchQueue)
         // ★ 强引用：setDelegate 是 weak，不挂住就会被释放 → 「不支持的 URL」
         objc_setAssociatedObject(asset, &kLoaderKey, session, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         return asset
@@ -55,6 +55,9 @@ final class StreamResourceLoader {
 
     final class Session: NSObject, AVAssetResourceLoaderDelegate, URLSessionDataDelegate {
 
+        /// 给 AVAssetResourceLoader.setDelegate 用（要求 dispatch_queue_t）
+        let dispatchQueue = DispatchQueue(label: "io.openlist.streamloader.rl")
+        /// URLSession delegate 队列
         let queue: OperationQueue
         private let realURL: URL
         private let headers: [String: String]
