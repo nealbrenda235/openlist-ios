@@ -35,6 +35,10 @@
 		A100000100000000000001C /* GlassShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000200000000000001C /* GlassShell.swift */; };
 		A100000100000000000001D /* AdminShareCreate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000200000000000001D /* AdminShareCreate.swift */; };
 		A100000100000000000001E /* AdminExtraScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000200000000000001E /* AdminExtraScreens.swift */; };
+		A1000001000000000000021 /* StreamResourceLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000021 /* StreamResourceLoader.swift */; };
+		A1000001000000000000022 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000022 /* DesignSystem.swift */; };
+		A1000001000000000000023 /* RouteDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000023 /* RouteDestination.swift */; };
+		A1000001000000000000031 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000031 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +72,10 @@
 		A100000200000000000001C /* GlassShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassShell.swift; sourceTree = "<group>"; };
 		A100000200000000000001D /* AdminShareCreate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminShareCreate.swift; sourceTree = "<group>"; };
 		A100000200000000000001E /* AdminExtraScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminExtraScreens.swift; sourceTree = "<group>"; };
+		A1000002000000000000021 /* StreamResourceLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamResourceLoader.swift; sourceTree = "<group>"; };
+		A1000002000000000000022 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		A1000002000000000000023 /* RouteDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteDestination.swift; sourceTree = "<group>"; };
+		A1000002000000000000031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,6 +100,7 @@
 		A1000004000000000000002 /* OlClient */ = {
 			isa = PBXGroup;
 			children = (
+				A1000002000000000000031 /* Assets.xcassets */,
 				A1000004000000000000003 /* App */,
 				A1000004000000000000004 /* Core */,
 				A1000004000000000000005 /* UI */,
@@ -115,6 +124,7 @@
 		A1000004000000000000004 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				A1000002000000000000021 /* StreamResourceLoader.swift */,
 				A1000002000000000000016 /* AdminApi.swift */,
 				A1000002000000000000004 /* Net.swift */,
 				A1000002000000000000005 /* OpenListApi.swift */,
@@ -130,6 +140,7 @@
 		A1000004000000000000005 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				A1000002000000000000022 /* DesignSystem.swift */,
 				A100000200000000000001C /* GlassShell.swift */,
 				A100000200000000000001B /* Theme.swift */,
 				A100000200000000000000B /* Components.swift */,
@@ -140,6 +151,7 @@
 		A1000004000000000000006 /* Screens */ = {
 			isa = PBXGroup;
 			children = (
+				A1000002000000000000023 /* RouteDestination.swift */,
 				A100000200000000000001E /* AdminExtraScreens.swift */,
 				A100000200000000000001D /* AdminShareCreate.swift */,
 				A1000002000000000000017 /* AdminScreen.swift */,
@@ -224,6 +236,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1000001000000000000031 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -253,6 +266,9 @@
 				A1000001000000000000011 /* SearchScreen.swift in Sources */,
 				A1000001000000000000012 /* TasksScreen.swift in Sources */,
 				A1000001000000000000013 /* SettingsScreen.swift in Sources */,
+				A1000001000000000000023 /* RouteDestination.swift in Sources */,
+				A1000001000000000000022 /* DesignSystem.swift in Sources */,
+				A1000001000000000000021 /* StreamResourceLoader.swift in Sources */,
 				A100000100000000000001E /* AdminExtraScreens.swift in Sources */,
 				A100000100000000000001D /* AdminShareCreate.swift in Sources */,
 				A100000100000000000001C /* GlassShell.swift in Sources */,

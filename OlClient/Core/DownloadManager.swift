@@ -9,6 +9,7 @@
 
 import Foundation
 import Combine
+import Network
 
 enum DownloadState: String, Codable {
     case queued, running, paused, done, failed, canceled
@@ -214,7 +215,30 @@ final class DownloadManager: NSObject, ObservableObject {
         }
     }
 
+    /// 当前是否允许下载（仅 Wi-Fi 开关生效时必须检查，否则设置形同虚设）。
+    private var networkAllowed: Bool {
+        guard settings.downloadWifiOnly else { return true }
+        let monitor = NWPathMonitor()
+        let sema = DispatchSemaphore(value: 0)
+        var wifi = false
+        monitor.pathUpdateHandler = { path in
+            wifi = path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet)
+            sema.signal()
+        }
+        monitor.start(queue: DispatchQueue.global())
+        _ = sema.wait(timeout: .now() + 1.0)
+        monitor.cancel()
+        return wifi
+    }
+
     private func pump() {
+        guard networkAllowed else {
+            // 把在跑的也暂停掉，不然开关只在「新任务」上生效
+            for item in items where item.state == .running {
+                pause(item.id)
+            }
+            return
+        }
         let limit = max(1, settings.downloadConcurrency)
         var running = items.filter { $0.state == .running }.count
         guard running < limit else { return }

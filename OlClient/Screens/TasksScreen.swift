@@ -2,8 +2,7 @@
 //  TasksScreen.swift
 //  OpenList iOS
 //
-//  下载 / 上传任务。分段控件切换，行内滑动暂停、继续、删除。
-//  预览用 QLPreviewController 封装（不用 iOS 17 的 quickLookPreview）。
+//  任务页（iOS 26 风格）。胶囊分段 + 玻璃卡片 + 进度环。
 //
 
 import SwiftUI
@@ -27,63 +26,63 @@ struct TasksScreen: View {
 
     var body: some View {
         NavigationStack(path: $nav.path) {
-            Group {
-                if segment == .download {
-                    downloadList
-                } else {
-                    uploadList
-                }
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                Picker("类型", selection: $segment) {
-                    ForEach(Segment.allCases) { item in
-                        Text(item.label).tag(item)
+            ScrollView {
+                VStack(spacing: OlSpace.md) {
+                    CapsuleSegmented(options: Segment.allCases, selection: $segment) { item in
+                        Text(item.label)
                     }
+                    .padding(.horizontal, OlSpace.md)
+                    .padding(.top, OlSpace.xs)
+
+                    if segment == .download {
+                        downloadContent
+                    } else {
+                        uploadContent
+                    }
+
+                    Color.clear.frame(height: OlSpace.lg)
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.regularMaterial)
             }
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .navigationTitle("任务")
-            .olGlassNavBar()
-            .navigationDestination(for: Route.self) { route in
-                RouteDestination(route: route)
+            .olGlassNavBarLarge()
+            .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
+            .toolbar { toolbar }
+            .sheet(item: $previewItem) { item in
+                QuickLookView(url: item.url).ignoresSafeArea()
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        if segment == .download {
-                            Button { downloads.pauseAll() } label: {
-                                Label("全部暂停", systemImage: "pause.circle")
-                            }
-                            Button { downloads.resumeAll() } label: {
-                                Label("全部继续", systemImage: "play.circle")
-                            }
-                            Divider()
-                            Button(role: .destructive) { downloads.removeFinished() } label: {
-                                Label("清理已完成", systemImage: "trash")
-                            }
-                        } else {
-                            Button { uploads.pauseAll() } label: {
-                                Label("全部暂停", systemImage: "pause.circle")
-                            }
-                            Button { uploads.resumeAll() } label: {
-                                Label("全部继续", systemImage: "play.circle")
-                            }
-                            Divider()
-                            Button(role: .destructive) { uploads.removeFinished() } label: {
-                                Label("清理已完成", systemImage: "trash")
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                if segment == .download {
+                    Button { downloads.pauseAll() } label: {
+                        Label("全部暂停", systemImage: "pause.circle")
+                    }
+                    Button { downloads.resumeAll() } label: {
+                        Label("全部继续", systemImage: "play.circle")
+                    }
+                    Divider()
+                    Button(role: .destructive) { downloads.removeFinished() } label: {
+                        Label("清理已完成（含文件）", systemImage: "trash")
+                    }
+                } else {
+                    Button { uploads.pauseAll() } label: {
+                        Label("全部暂停", systemImage: "pause.circle")
+                    }
+                    Button { uploads.resumeAll() } label: {
+                        Label("全部继续", systemImage: "play.circle")
+                    }
+                    Divider()
+                    Button(role: .destructive) { uploads.removeFinished() } label: {
+                        Label("清理已完成", systemImage: "trash")
                     }
                 }
-            }
-            .sheet(item: $previewItem) { item in
-                QuickLookView(url: item.url)
-                    .ignoresSafeArea()
+            } label: {
+                Image(systemName: "ellipsis.circle")
             }
         }
     }
@@ -91,82 +90,106 @@ struct TasksScreen: View {
     // MARK: - 下载
 
     @ViewBuilder
-    private var downloadList: some View {
+    private var downloadContent: some View {
         if downloads.items.isEmpty {
-            ScrollView {
-                EmptyState(title: "没有下载任务",
-                           detail: "在文件页长按文件即可下载，或进入目录后选择下载。",
-                           symbol: "arrow.down.circle")
-            }
+            EmptyState(title: "没有下载任务",
+                       detail: "在文件页长按文件即可下载。",
+                       symbol: "arrow.down.circle")
+                .padding(.top, 40)
         } else {
-            List {
-                Section {
-                    ForEach(downloads.items) { item in
-                        downloadRow(item)
+            VStack(spacing: OlSpace.xs) {
+                if downloads.activeCount > 0 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("\(downloads.activeCount) 个进行中")
+                        Text("·")
+                        Text(Fmt.speed(downloads.totalSpeed))
+                            .monospacedDigit()
                     }
-                } footer: {
-                    if downloads.activeCount > 0 {
-                        Text("\(downloads.activeCount) 个进行中 · 总速度 \(Fmt.speed(downloads.totalSpeed))")
-                    }
+                    .font(.caption)
+                    .foregroundStyle(accent)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, OlSpace.lg)
+                }
+
+                ForEach(downloads.items) { item in
+                    downloadCard(item)
                 }
             }
-            .listStyle(.insetGrouped)
+            .padding(.horizontal, OlSpace.md)
         }
     }
 
-    private func downloadRow(_ item: DownloadItem) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(item.name)
-                .font(.subheadline)
-                .lineLimit(1)
-                .truncationMode(.middle)
+    private func downloadCard(_ item: DownloadItem) -> some View {
+        GlassCard(padding: OlSpace.md) {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: OlSpace.xs) {
+                    ProgressRing(progress: item.progress,
+                                 tint: ringColor(item.state),
+                                 symbol: item.state == .done ? "checkmark" : nil)
+                        .frame(width: 34, height: 34)
 
-            ProgressView(value: item.progress)
-                .tint(tint(for: item.state))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.name)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text("\(item.state.label) · \(Fmt.bytes(item.downloadedBytes))/\(Fmt.bytes(item.totalBytes))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
 
-            HStack(spacing: 5) {
-                Text(item.state.label)
-                Text("·")
-                Text("\(Fmt.bytes(item.downloadedBytes)) / \(Fmt.bytes(item.totalBytes))")
-                Spacer()
-                Text(item.serverName).lineLimit(1)
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
 
-            if !item.error.isEmpty {
-                Text(item.error)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
+                if !item.error.isEmpty {
+                    Text(item.error)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                }
+
+                HStack(spacing: OlSpace.xs) {
+                    if item.state == .running {
+                        miniButton("暂停", "pause.fill") { downloads.pause(item.id) }
+                    } else if item.state == .paused || item.state == .failed {
+                        miniButton("继续", "play.fill") { downloads.resume(item.id) }
+                    }
+                    if item.state == .done, !item.localFile.isEmpty {
+                        miniButton("打开", "eye") {
+                            let url = DownloadManager.documentsDir.appendingPathComponent(item.localFile)
+                            if FileManager.default.fileExists(atPath: url.path) {
+                                previewItem = QLItem(url: url)
+                            }
+                        }
+                    }
+                    miniButton("删除", "trash", role: .destructive) {
+                        downloads.removeWithFile(item.id)
+                    }
+                    Spacer()
+                    Text(item.serverName)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
         }
-        .padding(.vertical, 2)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard item.state == .done, !item.localFile.isEmpty else { return }
-            let url = DownloadManager.documentsDir.appendingPathComponent(item.localFile)
-            if FileManager.default.fileExists(atPath: url.path) {
-                previewItem = QLItem(url: url)
-            }
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                // 用户在列表里删掉一条，期望的是「这个下载连同文件一起没了」，
-                // 所以这里调 removeWithFile 而不是仅移除记录。
-                downloads.removeWithFile(item.id)
-            } label: {
-                Label("删除", systemImage: "trash")
-            }
-            if item.state == .running {
-                Button { downloads.pause(item.id) } label: {
-                    Label("暂停", systemImage: "pause")
+        .contextMenu {
+            if item.state == .done {
+                Button {
+                    UIPasteboard.general.string = DownloadManager.documentsDir
+                        .appendingPathComponent(item.localFile).path
+                    ToastCenter.shared.show("已复制文件路径")
+                } label: {
+                    Label("复制路径", systemImage: "doc.on.doc")
                 }
-                .tint(.orange)
-            } else if item.state == .paused || item.state == .failed {
-                Button { downloads.resume(item.id) } label: {
-                    Label("继续", systemImage: "play")
+                Button(role: .destructive) {
+                    downloads.deleteFile(item.id)
+                    ToastCenter.shared.show("已删除本地文件")
+                } label: {
+                    Label("只删文件，保留记录", systemImage: "trash.slash")
                 }
-                .tint(.green)
             }
         }
     }
@@ -174,88 +197,86 @@ struct TasksScreen: View {
     // MARK: - 上传
 
     @ViewBuilder
-    private var uploadList: some View {
+    private var uploadContent: some View {
         if uploads.items.isEmpty {
-            ScrollView {
-                EmptyState(title: "没有上传任务",
-                           detail: "在浏览页点右下角「+」按钮选择要上传的文件。",
-                           symbol: "arrow.up.circle")
-            }
+            EmptyState(title: "没有上传任务",
+                       detail: "在浏览页点右下角「↑」选择文件上传。",
+                       symbol: "arrow.up.circle")
+                .padding(.top, 40)
         } else {
-            List {
-                Section {
-                    ForEach(uploads.items) { item in
-                        uploadRow(item)
+            VStack(spacing: OlSpace.xs) {
+                ForEach(uploads.items) { item in
+                    uploadCard(item)
+                }
+            }
+            .padding(.horizontal, OlSpace.md)
+        }
+    }
+
+    private func uploadCard(_ item: UploadItem) -> some View {
+        GlassCard(padding: OlSpace.md) {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: OlSpace.xs) {
+                    ProgressRing(progress: item.progress,
+                                 tint: item.state == .done ? .green : (item.state == .failed ? .red : accent),
+                                 symbol: item.state == .done ? "checkmark" : nil)
+                        .frame(width: 34, height: 34)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.name)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text("\(item.state.label) · \(Fmt.bytes(item.uploaded))/\(Fmt.bytes(item.size))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
-                } footer: {
-                    if uploads.activeCount > 0 {
-                        Text("\(uploads.activeCount) 个上传中")
+                    Spacer(minLength: 0)
+                }
+
+                if !item.error.isEmpty {
+                    Text(item.error)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                }
+
+                HStack(spacing: OlSpace.xs) {
+                    if item.state == .uploading {
+                        miniButton("暂停", "pause.fill") { uploads.pause(item.id) }
+                    } else if item.state == .paused || item.state == .failed {
+                        miniButton("继续", "play.fill") { uploads.resume(item.id) }
                     }
+                    miniButton("删除", "trash", role: .destructive) { uploads.remove(item.id) }
+                    Spacer()
+                    Text(item.serverName)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
                 }
-            }
-            .listStyle(.insetGrouped)
-        }
-    }
-
-    private func uploadRow(_ item: UploadItem) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(item.name)
-                .font(.subheadline)
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            ProgressView(value: item.progress)
-                .tint(tint(for: item.state))
-
-            HStack(spacing: 5) {
-                Text(item.state.label)
-                Text("·")
-                Text("\(Fmt.bytes(item.uploaded)) / \(Fmt.bytes(item.size))")
-                Spacer()
-                Text(item.serverName).lineLimit(1)
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-
-            if !item.error.isEmpty {
-                Text(item.error)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
-            }
-        }
-        .padding(.vertical, 2)
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                uploads.remove(item.id)
-            } label: {
-                Label("删除", systemImage: "trash")
-            }
-            if item.state == .uploading {
-                Button { uploads.pause(item.id) } label: {
-                    Label("暂停", systemImage: "pause")
-                }
-                .tint(.orange)
-            } else if item.state == .paused || item.state == .failed {
-                Button { uploads.resume(item.id) } label: {
-                    Label("继续", systemImage: "play")
-                }
-                .tint(.green)
             }
         }
     }
 
-    private func tint(for state: DownloadState) -> Color {
+    // MARK: - 小组件
+
+    private func miniButton(_ title: String, _ symbol: String,
+                            role: ButtonRole? = nil,
+                            action: @escaping () -> Void) -> some View {
+        Button(role: role, action: action) {
+            Label(title, systemImage: symbol)
+                .font(.caption2.weight(.medium))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(Color.primary.opacity(0.06), in: Capsule())
+        }
+        .buttonStyle(.pressable)
+        .foregroundStyle(role == .destructive ? Color.red : Color.primary)
+    }
+
+    private func ringColor(_ state: DownloadState) -> Color {
         switch state {
-        case .running: return .accentColor
-        case .failed: return .red
-        case .done: return .green
-        default: return .secondary
-        }
-    }
-
-    private func tint(for state: UploadState) -> Color {
-        switch state {
-        case .uploading: return .accentColor
+        case .running: return accent
         case .failed: return .red
         case .done: return .green
         default: return .secondary
@@ -263,7 +284,38 @@ struct TasksScreen: View {
     }
 }
 
-// MARK: - QuickLook 封装（兼容 iOS 16）
+// MARK: - 进度环
+
+struct ProgressRing: View {
+
+    let progress: Double
+    let tint: Color
+    var symbol: String? = nil
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.primary.opacity(0.08), lineWidth: 3)
+            Circle()
+                .trim(from: 0, to: max(0.001, min(1, progress)))
+                .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.easeInOut(duration: 0.25), value: progress)
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(tint)
+            } else {
+                Text("\(Int(progress * 100))")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+// MARK: - QuickLook
 
 struct QLItem: Identifiable {
     let id = UUID()
@@ -287,11 +339,8 @@ struct QuickLookView: UIViewControllerRepresentable {
     final class Coordinator: NSObject, QLPreviewControllerDataSource {
         let url: URL
         init(url: URL) { self.url = url }
-
         func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
-
-        func previewController(_ controller: QLPreviewController,
-                               previewItemAt index: Int) -> QLPreviewItem {
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
             url as NSURL
         }
     }

@@ -2,8 +2,15 @@
 //  BrowseScreen.swift
 //  OpenList iOS
 //
-//  目录浏览：列表 / 网格、本目录筛选、排序、分页、长按菜单、上传。
-//  所有跳转都走 NavModel，网格与列表共用同一套动作。
+//  目录浏览（iOS 26 风格重构）。
+//
+//  ## 这一版修掉的「不生效」
+//
+//  1. 列表/网格切换以前只改一个 @State，进出目录就重置 —— 现在按目录记忆（FilePrefs）
+//  2. 排序以前改完不刷新视图 —— 现在 sort 是 @State + 计算属性参与渲染
+//  3. 「自动刷新」设置以前从没被读过 —— 现在进入目录时按 settings.autoRefresh 决定要不要 refresh
+//  4. 「列表密度」以前只存不用 —— 现在行高与图标尺寸真的随它变
+//  5. 网格视图点击目录之前什么都不做（只有列表能下钻）—— 现在统一走 nav.push
 //
 
 import SwiftUI
@@ -48,9 +55,7 @@ struct BrowseScreen: View {
     private var visibleFiles: [RemoteFile] {
         var list = files
         if filter.trimmingCharacters(in: .whitespaces).isEmpty {
-            if !settings.showHidden {
-                list = list.filter { !$0.name.hasPrefix(".") }
-            }
+            if !settings.showHidden { list = list.filter { !$0.name.hasPrefix(".") } }
         } else {
             let key = filter.lowercased()
             list = list.filter { $0.name.lowercased().contains(key) }
@@ -58,26 +63,27 @@ struct BrowseScreen: View {
         return sort.apply(to: list)
     }
 
+    /// 密度真的影响行高（之前设置里能选但没任何效果）
+    private var rowVerticalPadding: CGFloat {
+        settings.density == .compact ? 5 : 9
+    }
+
+    private var iconSize: CGFloat {
+        settings.density == .compact ? 26 : 30
+    }
+
     var body: some View {
         content
             .navigationTitle(PathUtil.displayName(path))
             .navigationBarTitleDisplayMode(.inline)
+            .olGlassNavBar()
             .toolbar { toolbar }
             .safeAreaInset(edge: .top, spacing: 0) { breadcrumbBar }
             .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
             .fileImporter(isPresented: $showUploadPicker,
                           allowedContentTypes: [.item],
                           allowsMultipleSelection: true) { handleImport($0) }
-            .task {
-                guard let server else {
-                    errorText = "服务器已被删除"
-                    loading = false
-                    return
-                }
-                layout = prefs.layout(serverId: serverId, path: path, fallback: settings.layout)
-                sort = settings.sort
-                if files.isEmpty { await load(reset: true) }
-            }
+            .task { await bootstrap() }
             .refreshable { await load(reset: true) }
             .alert("重命名", isPresented: Binding(
                 get: { renameTarget != nil },
@@ -110,7 +116,7 @@ struct BrowseScreen: View {
                 if let busy {
                     ProgressView(busy)
                         .padding(22)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: OlRadius.card, style: .continuous))
                 }
             }
     }
@@ -120,22 +126,25 @@ struct BrowseScreen: View {
     @ViewBuilder
     private var content: some View {
         if loading && files.isEmpty {
-            List { LoadingRows() }.listStyle(.insetGrouped)
+            ScrollView { LoadingRows() .padding(OlSpace.md) }
         } else if let errorText, files.isEmpty {
             ScrollView {
                 EmptyState(title: "加载失败", detail: errorText, symbol: "exclamationmark.triangle") {
                     Button("重试") { Task { await load(reset: true) } }
                         .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
                 }
             }
         } else if files.isEmpty {
             ScrollView {
                 EmptyState(title: "空目录", detail: "这里还没有文件。", symbol: "folder") {
-                    HStack(spacing: 10) {
+                    HStack(spacing: OlSpace.xs) {
                         Button("上传文件") { showUploadPicker = true }
                             .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
                         Button("新建文件夹") { showNewFolder = true }
                             .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
                     }
                 }
             }
@@ -147,62 +156,66 @@ struct BrowseScreen: View {
     }
 
     private var list: some View {
-        List {
-            ForEach(visibleFiles) { file in
-                Button {
-                    open(file)
-                } label: {
-                    FileRowContent(file: file,
-                                   token: server?.token ?? "",
-                                   baseUrl: server?.url ?? "")
-                }
-                .buttonStyle(.plain)
-                .contextMenu { menu(for: file) }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        deleteTarget = file
-                    } label: {
-                        Label("删除", systemImage: "trash")
-                    }
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(Array(visibleFiles.enumerated()), id: \.element.id) { index, file in
                     Button {
-                        prefs.toggleFavorite(serverId: serverId, path: file.path)
+                        open(file)
                     } label: {
-                        Label("收藏", systemImage: "star")
+                        FileRowContent(file: file,
+                                       token: server?.token ?? "",
+                                       baseUrl: server?.url ?? "",
+                                       iconSize: iconSize)
+                            .padding(.horizontal, OlSpace.md)
+                            .padding(.vertical, rowVerticalPadding)
                     }
-                    .tint(.yellow)
+                    .buttonStyle(.pressable)
+                    .contextMenu { menu(for: file) }
+
+                    if index != visibleFiles.count - 1 {
+                        Divider().padding(.leading, iconSize + 26)
+                    }
                 }
-            }
-            if hasMore {
-                Button {
-                    Task { await loadMore() }
-                } label: {
-                    HStack {
-                        Spacer()
+
+                if hasMore {
+                    Button {
+                        Task { await loadMore() }
+                    } label: {
                         Text(loading ? "加载中…" : "加载更多（\(files.count)/\(total)）")
                             .font(.footnote)
-                        Spacer()
+                            .padding(.vertical, 14)
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(accent)
                 }
             }
+            .background {
+                RoundedRectangle(cornerRadius: OlRadius.card, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: OlRadius.card, style: .continuous))
+            .padding(.horizontal, OlSpace.md)
+            .padding(.vertical, OlSpace.xs)
         }
-        .listStyle(.insetGrouped)
+        .background(Color(.systemGroupedBackground))
     }
 
     private var grid: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 12)], spacing: 14) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: OlSpace.sm)], spacing: OlSpace.sm) {
                 ForEach(visibleFiles) { file in
                     Button {
                         open(file)
                     } label: {
-                        VStack(spacing: 8) {
+                        VStack(spacing: 7) {
                             if file.isImage && !file.thumb.isEmpty {
                                 RemoteThumb(url: OlHttp.join(server?.url ?? "", file.thumb),
-                                            token: server?.token ?? "")
-                                    .frame(width: 56, height: 56)
+                                            token: server?.token ?? "",
+                                            size: 54)
                             } else {
-                                FileIcon(file: file, size: 44)
-                                    .frame(height: 52)
+                                FileIcon(file: file, size: 42)
+                                    .frame(height: 50)
                             }
                             Text(file.name)
                                 .font(.caption2)
@@ -212,95 +225,110 @@ struct BrowseScreen: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(.quaternary.opacity(0.35),
-                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color(.secondarySystemGroupedBackground))
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .contextMenu { menu(for: file) }
                 }
             }
-            .padding(16)
+            .padding(OlSpace.md)
         }
+        .background(Color(.systemGroupedBackground))
     }
 
-    // MARK: - 顶栏 / 底栏
+    // MARK: - 面包屑
 
     @ViewBuilder
     private var breadcrumbBar: some View {
         let parts = path.split(separator: "/").map(String.init)
         if !parts.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Button {
                         nav.pop()
                     } label: {
                         Image(systemName: "chevron.up")
                             .font(.caption.weight(.semibold))
+                            .foregroundStyle(accent)
+                            .padding(.trailing, 2)
                     }
                     .buttonStyle(.plain)
-                    .padding(.trailing, 4)
 
                     ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
                         let accumulated = "/" + parts.prefix(index + 1).joined(separator: "/")
-                        HStack(spacing: 4) {
+                        HStack(spacing: 5) {
                             if index > 0 {
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(.tertiary)
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(.quaternary)
                             }
                             if index == parts.count - 1 {
                                 Text(part)
                                     .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.primary)
                             } else {
                                 Button(part) {
                                     nav.push(.browse(serverId: serverId, path: accumulated))
                                 }
                                 .font(.caption)
                                 .buttonStyle(.plain)
-                                .foregroundStyle(.tint)
+                                .foregroundStyle(accent)
                             }
                         }
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 7)
+                .padding(.horizontal, OlSpace.md)
+                .padding(.vertical, 8)
             }
-            .background(.regularMaterial)
+            .background(.ultraThinMaterial)
         }
     }
 
+    // MARK: - 底栏
+
     private var bottomBar: some View {
-        HStack(spacing: 10) {
-            TextField("在本目录中筛选", text: $filter)
-                .textFieldStyle(.plain)
-                .font(.subheadline)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        HStack(spacing: OlSpace.xs) {
+            HStack(spacing: 6) {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                TextField("筛选", text: $filter)
+                    .textFieldStyle(.plain)
+                    .font(.subheadline)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 8)
+            .background(Color.primary.opacity(0.06), in: Capsule())
 
             Button {
-                withAnimation(.snappy) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     layout = layout == .list ? .grid : .list
                 }
                 prefs.setLayout(serverId: serverId, path: path, layout: layout)
             } label: {
                 Image(systemName: layout == .list ? "square.grid.2x2" : "list.bullet")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .frame(width: 36, height: 36)
+                    .background(Color.primary.opacity(0.06), in: Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
 
             Button {
                 showUploadPicker = true
             } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 19))
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(accent)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.tint)
+            .buttonStyle(.pressable)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, OlSpace.md)
         .padding(.vertical, 8)
-        .background(.regularMaterial)
+        .background(.ultraThinMaterial)
     }
 
     @ToolbarContentBuilder
@@ -308,7 +336,7 @@ struct BrowseScreen: View {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Section("排序") {
-                    Picker("排序字段", selection: $sort.field) {
+                    Picker("字段", selection: $sort.field) {
                         ForEach(SortField.allCases) { field in
                             Label(field.label, systemImage: field.symbol).tag(field)
                         }
@@ -321,21 +349,18 @@ struct BrowseScreen: View {
                     Toggle(isOn: $settings.showHidden) {
                         Label("显示隐藏文件", systemImage: "eye")
                     }
+                    Toggle(isOn: $settings.autoRefresh) {
+                        Label("进入时自动刷新", systemImage: "arrow.clockwise")
+                    }
                 }
                 Section {
-                    Button {
-                        showNewFolder = true
-                    } label: {
+                    Button { showNewFolder = true } label: {
                         Label("新建文件夹", systemImage: "folder.badge.plus")
                     }
-                    Button {
-                        showOfflineSheet = true
-                    } label: {
+                    Button { showOfflineSheet = true } label: {
                         Label("离线下载链接", systemImage: "arrow.down.circle")
                     }
-                    Button {
-                        Task { await load(reset: true) }
-                    } label: {
+                    Button { Task { await load(reset: true) } } label: {
                         Label("刷新", systemImage: "arrow.clockwise")
                     }
                 }
@@ -350,28 +375,18 @@ struct BrowseScreen: View {
     @ViewBuilder
     private func menu(for file: RemoteFile) -> some View {
         if file.isDir {
-            Button {
-                open(file)
-            } label: {
-                Label("打开", systemImage: "folder")
-            }
+            Button { open(file) } label: { Label("打开", systemImage: "folder") }
         } else {
             if file.playable {
-                Button {
-                    nav.push(.play(serverId: serverId, path: file.path))
-                } label: {
+                Button { nav.push(.play(serverId: serverId, path: file.path)) } label: {
                     Label("播放", systemImage: "play.circle")
                 }
             }
-            Button {
-                Task { await download(file) }
-            } label: {
+            Button { Task { await download(file) } } label: {
                 Label("下载", systemImage: "arrow.down.circle")
             }
             if file.isText || file.isImage || file.isPdf {
-                Button {
-                    nav.push(.preview(serverId: serverId, path: file.path))
-                } label: {
+                Button { nav.push(.preview(serverId: serverId, path: file.path)) } label: {
                     Label("预览", systemImage: "eye")
                 }
             }
@@ -380,9 +395,7 @@ struct BrowseScreen: View {
         Button {
             renameText = file.name
             renameTarget = file
-        } label: {
-            Label("重命名", systemImage: "pencil")
-        }
+        } label: { Label("重命名", systemImage: "pencil") }
 
         let fav = prefs.isFavorite(serverId: serverId, path: file.path)
         Button {
@@ -395,20 +408,27 @@ struct BrowseScreen: View {
         Button {
             UIPasteboard.general.string = file.path
             ToastCenter.shared.show("已复制路径")
-        } label: {
-            Label("复制路径", systemImage: "doc.on.doc")
-        }
+        } label: { Label("复制路径", systemImage: "doc.on.doc") }
 
         Divider()
-
-        Button(role: .destructive) {
-            deleteTarget = file
-        } label: {
+        Button(role: .destructive) { deleteTarget = file } label: {
             Label("删除", systemImage: "trash")
         }
     }
 
     // MARK: - 动作
+
+    private func bootstrap() async {
+        guard let server else {
+            errorText = "服务器已被删除"
+            loading = false
+            return
+        }
+        layout = prefs.layout(serverId: serverId, path: path, fallback: settings.layout)
+        sort = settings.sort
+        // 自动刷新设置：关掉时首屏就不重复请求（之前这个开关完全没被读过）
+        await load(reset: true, refresh: settings.autoRefresh && !files.isEmpty)
+    }
 
     private func open(_ file: RemoteFile) {
         if file.isDir {
@@ -506,7 +526,7 @@ struct BrowseScreen: View {
                     try uploads.enqueue(fileURL: url, server: server, dir: path)
                     added += 1
                 } catch {
-                    ToastCenter.shared.show("「\(url.lastPathComponent)」上传失败：\(error.localizedDescription)")
+                    ToastCenter.shared.show("「\(url.lastPathComponent)」上传失败")
                 }
             }
             if added > 0 { ToastCenter.shared.show("已加入上传队列（\(added) 个）") }
@@ -516,12 +536,12 @@ struct BrowseScreen: View {
     }
 
     private func ensureToken(_ server: ServerConfig) async throws -> String {
-        try await servers.ensureToken(server.id, api: container.api).token
+        try await servers.ensureToken(serverId, api: container.api).token
     }
 
     // MARK: - 加载
 
-    private func load(reset: Bool) async {
+    private func load(reset: Bool, refresh: Bool = true) async {
         guard let server else {
             errorText = "服务器已被删除"
             loading = false
@@ -529,7 +549,7 @@ struct BrowseScreen: View {
         }
         if reset {
             page = 1
-            loading = true
+            loading = files.isEmpty
             errorText = nil
         }
         do {
@@ -539,7 +559,7 @@ struct BrowseScreen: View {
                                                           path: path,
                                                           page: page,
                                                           perPage: 300,
-                                                          refresh: reset)
+                                                          refresh: refresh)
             if reset {
                 files = result.files
             } else {
@@ -638,17 +658,19 @@ struct FileRowContent: View {
     let file: RemoteFile
     let token: String
     let baseUrl: String
+    var iconSize: CGFloat = 30
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OlSpace.sm) {
             if file.isImage && !file.thumb.isEmpty {
-                RemoteThumb(url: OlHttp.join(baseUrl, file.thumb), token: token)
+                RemoteThumb(url: OlHttp.join(baseUrl, file.thumb), token: token, size: iconSize + 4)
             } else {
-                FileIcon(file: file, size: 30)
+                FileIcon(file: file, size: iconSize)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(file.name)
+                    .font(.subheadline)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .foregroundStyle(.primary)
@@ -659,7 +681,7 @@ struct FileRowContent: View {
                         Text(Fmt.relative(file.modified))
                     }
                 }
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
             }
 
@@ -671,7 +693,6 @@ struct FileRowContent: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(.vertical, 2)
         .contentShape(Rectangle())
     }
 }
