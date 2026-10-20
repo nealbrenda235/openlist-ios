@@ -189,7 +189,7 @@ struct AdminScreen: View {
 
             Text(storage.statusLabel)
                 .font(.caption2)
-                .foregroundStyle(storage.disabled ? .secondary : .green)
+                .foregroundStyle(storage.disabled ? Color.secondary : Color.green)
         }
         .padding(.vertical, 1)
     }

@@ -412,11 +412,12 @@ final class FilePrefs: ObservableObject {
     }
 
     /// 按服务器过滤，只保留仍能对应到现有服务器的条目。
-    func favorites(serverId: String) -> [(path: String)] {
+    /// 返回纯 [String]：单元素带标签的元组 (path: String) 在 Swift 里非法。
+    func favoritePaths(serverId: String) -> [String] {
         favorites.compactMap { key -> String? in
             guard let (sid, path) = Self.split(key), sid == serverId else { return nil }
             return path
-        }.map { (path: $0) }
+        }
     }
 
     // 标签

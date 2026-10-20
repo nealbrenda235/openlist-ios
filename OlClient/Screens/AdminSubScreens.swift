@@ -491,7 +491,7 @@ struct AdminTasksScreen: View {
                 Spacer(minLength: 6)
                 Text(task.stateLabel)
                     .font(.caption2)
-                    .foregroundStyle(task.isActive ? .tint : .secondary)
+                    .foregroundStyle(task.isActive ? Color.accentColor : Color.secondary)
             }
 
             if task.isActive {
@@ -632,7 +632,7 @@ struct AdminSharesScreen: View {
                                 Spacer()
                                 Text(share.statusText)
                                     .font(.caption2)
-                                    .foregroundStyle(share.disabled ? .secondary : .green)
+                                    .foregroundStyle(share.disabled ? Color.secondary : Color.green)
                             }
                             HStack(spacing: 5) {
                                 Text("\(share.accessed)/\(share.maxAccessed)")

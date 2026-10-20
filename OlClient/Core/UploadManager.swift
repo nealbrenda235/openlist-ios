@@ -9,6 +9,11 @@
 import Foundation
 import Combine
 
+/// Result 的失败分支必须符合 Error 协议，String 不符合。
+struct UploadFailure: Error {
+    let message: String
+}
+
 enum UploadState: String, Codable {
     case queued, uploading, paused, done, failed, canceled
 
@@ -235,7 +240,7 @@ final class UploadManager: ObservableObject {
                     self?.update(item.id) { $0.uploaded = sent }
                 }
             },
-            onFinish: { [weak self] result in
+            onFinish: { [weak self] (result: Result<Void, UploadFailure>) in
                 Task { @MainActor in
                     guard let self else { return }
                     self.tasks.removeValue(forKey: item.id)
@@ -249,10 +254,10 @@ final class UploadManager: ObservableObject {
                         }
                         self.flash = "「\(item.name)」上传完成"
                         try? FileManager.default.removeItem(at: fileURL)
-                    case .failure(let message):
+                    case .failure(let failure):
                         self.update(item.id) {
                             $0.state = .failed
-                            $0.error = message
+                            $0.error = failure.message
                         }
                     }
                     self.persist()
@@ -319,11 +324,11 @@ final class UploadManager: ObservableObject {
 private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate {
 
     private let onProgress: (Int64) -> Void
-    private let onFinish: (Result<Void, String>) -> Void
+    private let onFinish: (Result<Void, UploadFailure>) -> Void
     private var responseText = Data()
 
     init(onProgress: @escaping (Int64) -> Void,
-         onFinish: @escaping (Result<Void, String>) -> Void) {
+         onFinish: @escaping (Result<Void, UploadFailure>) -> Void) {
         self.onProgress = onProgress
         self.onFinish = onFinish
     }
@@ -342,23 +347,23 @@ private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, UR
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error {
-            onFinish(.failure(OlRequest.describe((error as? URLError) ?? URLError(.unknown))))
+            onFinish(.failure(UploadFailure(message: OlRequest.describe((error as? URLError) ?? URLError(.unknown)))))
             return
         }
         guard let http = task.response as? HTTPURLResponse else {
-            onFinish(.failure("无效的服务器响应"))
+            onFinish(.failure(UploadFailure(message: "无效的服务器响应")))
             return
         }
         guard (200..<300).contains(http.statusCode) else {
             let text = String(data: responseText, encoding: .utf8) ?? ""
-            onFinish(.failure("HTTP \(http.statusCode)：\(text.prefix(120))"))
+            onFinish(.failure(UploadFailure(message: "HTTP \(http.statusCode)：\(text.prefix(120))")))
             return
         }
         if let json = try? JSONSerialization.jsonObject(with: responseText) as? [String: Any] {
             let code = json.olInt("code", 200)
             if code != 200 {
                 let msg = json.olString("message")
-                onFinish(.failure(msg.isEmpty ? "上传失败（code=\(code)）" : msg))
+                onFinish(.failure(UploadFailure(message: msg.isEmpty ? "上传失败（code=\(code)）" : msg)))
                 return
             }
         }

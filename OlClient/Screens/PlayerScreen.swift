@@ -190,7 +190,9 @@ struct PlayerScreen: View {
             // 断点续播
             if let serverId {
                 let saved = settings.playbackPosition(serverId: serverId, path: path)
-                if saved > 3 { player.seek(to: CMTime(seconds: saved, preferredTimescale: 600)) }
+                if saved > 3 {
+                    await player.seek(to: CMTime(seconds: saved, preferredTimescale: 600))
+                }
             }
 
             attachObservers(player)
