@@ -173,6 +173,10 @@ struct ShareItem: Identifiable, Hashable {
     var disabled: Bool
     var accessed: Int
     var maxAccessed: Int
+    /// 访客可见的说明；编辑时必须原样回传（服务端全量覆盖）。
+    var readme: String = ""
+    /// 页头 HTML；同上。
+    var header: String = ""
 
     var statusText: String {
         if disabled { return "已取消" }
@@ -440,21 +444,7 @@ final class AdminApi {
     func shares(baseUrl: String, token: String) async throws -> [ShareItem] {
         let json = try await get(baseUrl, "/api/share/list?page=1&per_page=0", token)
         guard let content = json.olObject("data")?.olArray("content") else { return [] }
-        return content.compactMap { element in
-            guard let o = element as? [String: Any] else { return nil }
-            return ShareItem(
-                id: o.olString("id"),
-                files: o.olArray("files")?.compactMap { $0 as? String } ?? [],
-                remark: o.olString("remark"),
-                creator: o.olString("creator"),
-                created: o.olString("created"),
-                expires: o.olString("expires"),
-                pwd: o.olString("pwd"),
-                disabled: o.olBool("disabled"),
-                accessed: o.olInt("accessed"),
-                maxAccessed: o.olInt("max_accessed")
-            )
-        }
+        return content.compactMap { Self.parseShare($0 as? [String: Any]) }
     }
 
     func deleteShare(baseUrl: String, token: String, id: String) async throws {
@@ -549,7 +539,9 @@ final class AdminApi {
             pwd: o.olString("pwd"),
             disabled: o.olBool("disabled"),
             accessed: o.olInt("accessed"),
-            maxAccessed: o.olInt("max_accessed")
+            maxAccessed: o.olInt("max_accessed"),
+            readme: o.olString("readme"),
+            header: o.olString("header")
         )
     }
 

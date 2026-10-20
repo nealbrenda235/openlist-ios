@@ -385,6 +385,8 @@ enum ServerStatus {
 
 struct ServerRow: View {
 
+    @Environment(\.olAccent) private var accent
+
     let server: ServerConfig
     let status: ServerStatus
 
@@ -395,7 +397,7 @@ struct ServerRow: View {
                     .fill(accent.opacity(0.14))
                 Image(systemName: "externaldrive.connected.to.line.below")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(accent)
             }
             .frame(width: 34, height: 34)
 
@@ -420,7 +422,7 @@ struct ServerRow: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(accent.opacity(0.14), in: Capsule())
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(accent)
             }
         }
         .padding(.vertical, 2)
